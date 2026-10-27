@@ -1,0 +1,56 @@
+{
+  "version": "15.2.1",
+  "vulnerabilities": [
+    {
+      "id": "d4c3b2a1",
+      "name": "CVE-2023-0464 in openssl",
+      "description": "Excessive resource usage verifying X.509 policy constraints.",
+      "severity": "High",
+      "location": {
+        "image": "registry.example.com/example-organisation/product-core:1.4.0",
+        "operating_system": "alpine 3.17",
+        "dependency": {
+          "package": {
+            "name": "openssl"
+          },
+          "version": "3.0.8-r0"
+        }
+      },
+      "identifiers": [
+        {
+          "type": "cve",
+          "name": "CVE-2023-0464",
+          "value": "CVE-2023-0464"
+        }
+      ],
+      "cvss_vectors": [
+        {
+          "vendor": "NVD",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        }
+      ]
+    }
+  ],
+  "scan": {
+    "analyzer": {
+      "id": "gcs",
+      "name": "GitLab Container Scanning",
+      "vendor": {
+        "name": "GitLab"
+      },
+      "version": "7.0.0"
+    },
+    "scanner": {
+      "id": "trivy",
+      "name": "Trivy",
+      "vendor": {
+        "name": "Aqua Security"
+      },
+      "version": "0.50.0"
+    },
+    "type": "container_scanning",
+    "start_time": "2026-10-14T08:00:00",
+    "end_time": "2026-10-14T08:02:00",
+    "status": "success"
+  }
+}

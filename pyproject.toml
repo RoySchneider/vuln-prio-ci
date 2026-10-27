@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vuln-prio-ci"
+version = "0.1.0"
+description = "Priorisierung von Sicherheitsbefunden als Stufe einer GitLab-Pipeline"
+readme = "README.md"
+requires-python = ">=3.15"
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "httpx>=0.27",
+    "ruamel.yaml>=0.18",
+    # eMudhra/emSign-Vorfall: erst ab 2026.10.19 ohne die emSign-Wurzel (src/vuln_prio_ci/tls.py)
+    "certifi>=2026.10.19",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2"]
+
+[project.scripts]
+vuln-prio-ci = "vuln_prio_ci.__main__:main"
+vuln-prio-sources = "vuln_prio_ci.sources.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+vuln_prio_ci = ["rules/*.csv"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

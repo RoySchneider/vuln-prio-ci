@@ -1,0 +1,34 @@
+# Einschätzungsdatei für die manuelle Priorisierung (Verfahren 2)
+# Ablage im Repository des Produkts, Pfad in PRIO_ASSESSMENTS (Standard security/prioritization-assessments.yaml).
+# Änderungen laufen über Merge Requests. Werte: siehe vuln-prio-ci, src/vuln_prio_ci/ingest/assessments.py.
+
+# Schutzbedarf des Produkts: höchster Schutzbedarf der Projekte, die es einsetzen (normal | high | very_high)
+protection_level: high
+protection_level_basis: "Schutzbedarfsfeststellung ProjekteXY"
+
+findings:
+  # Kennung = Regel-ID des Scanners und Datei (steht im Protokoll des Jobs als Vorlage)
+  - id: "java_inject_rule-SqlInjection:src/app/OrderRepository.java"
+    title: "SQL-Injection in OrderRepository"
+    exploitation_state: poc            # none | poc | active
+    exploitation_basis: "verbreitete Klasse; Exploit-Suche 2026-10-14 ohne Treffer"
+    exposure_level: intern             # lokal | intern | remote (leer: Vorbelegung remote)
+    exposure_basis: "Bedrohungsmodell ProjekteXY, Desktop Access, nach Anmeldung"
+    technical_impact: total            # partial | total
+    technical_impact_basis: "Lese- und Schreibzugriff auf alle Tabellen"
+    assessed_by: "N. N."
+    assessed_on: 2026-10-14
+
+  # Fehlalarm der statischen Analyse: VEX-Status statt Einschätzung
+  - id: "java_crypto_rule-WeakHash:src/test/java/app/HashTest.java"
+    vex_status: not_affected           # not_affected | fixed | affected | under_investigation
+    vex_justification: "nur Testcode, wird nicht ausgeliefert"
+
+# VEX-Aussagen zu Befunden mit CVE (Dependency und Container Scanning)
+vex:
+  - cve: CVE-2025-30208
+    package: vite                      # optional; ohne Paket gilt die Aussage für alle Pakete
+    status: not_affected
+    justification: "Entwicklungsserver wird nicht ausgeliefert und nicht im Netz betrieben"
+    assessed_by: "N. N."
+    assessed_on: 2026-10-14

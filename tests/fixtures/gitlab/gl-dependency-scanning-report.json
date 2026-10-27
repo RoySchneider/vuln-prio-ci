@@ -1,0 +1,143 @@
+{
+  "version": "15.2.1",
+  "vulnerabilities": [
+    {
+      "id": "a1f0c1d2e3b4",
+      "name": "Improper Input Validation in log4j-core",
+      "description": "Apache Log4j2 JNDI features do not protect against attacker controlled LDAP endpoints.",
+      "severity": "Critical",
+      "solution": "Upgrade to version 2.15.0 or above.",
+      "location": {
+        "file": "pom.xml",
+        "dependency": {
+          "package": {
+            "name": "org.apache.logging.log4j/log4j-core"
+          },
+          "version": "2.14.1"
+        }
+      },
+      "identifiers": [
+        {
+          "type": "gemnasium",
+          "name": "Gemnasium-0f1e2d3c",
+          "value": "0f1e2d3c-0000-0000-0000-000000000001"
+        },
+        {
+          "type": "cve",
+          "name": "CVE-2021-44228",
+          "value": "CVE-2021-44228",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+        },
+        {
+          "type": "ghsa",
+          "name": "GHSA-jfh8-c2jp-5v3q",
+          "value": "GHSA-jfh8-c2jp-5v3q"
+        }
+      ],
+      "cvss_vectors": [
+        {
+          "vendor": "GitLab",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
+        }
+      ]
+    },
+    {
+      "id": "b2e1d0c9f8a7",
+      "name": "Vite bypasses server.fs.deny when using ?raw??",
+      "description": "Arbitrary file read via the development server.",
+      "severity": "Medium",
+      "location": {
+        "file": "package-lock.json",
+        "dependency": {
+          "package": {
+            "name": "vite"
+          },
+          "version": "6.2.2"
+        }
+      },
+      "identifiers": [
+        {
+          "type": "gemnasium",
+          "name": "Gemnasium-11aa22bb",
+          "value": "11aa22bb-0000-0000-0000-000000000002"
+        },
+        {
+          "type": "cve",
+          "name": "CVE-2025-30208",
+          "value": "CVE-2025-30208"
+        },
+        {
+          "type": "ghsa",
+          "name": "GHSA-x574-m823-4x7w",
+          "value": "GHSA-x574-m823-4x7w"
+        }
+      ],
+      "cvss_vectors": [
+        {
+          "vendor": "GitLab",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "vendor": "GitLab",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
+        }
+      ]
+    },
+    {
+      "id": "c3d2e1f0a9b8",
+      "name": "Regular Expression Denial of Service in minimatch",
+      "description": "ReDoS in braceExpand.",
+      "severity": "High",
+      "location": {
+        "file": "package-lock.json",
+        "dependency": {
+          "package": {
+            "name": "minimatch"
+          },
+          "version": "3.0.4"
+        }
+      },
+      "identifiers": [
+        {
+          "type": "gemnasium",
+          "name": "Gemnasium-33cc44dd",
+          "value": "33cc44dd-0000-0000-0000-000000000003"
+        },
+        {
+          "type": "cve",
+          "name": "CVE-2022-3517",
+          "value": "CVE-2022-3517"
+        }
+      ],
+      "cvss_vectors": [
+        {
+          "vendor": "GitLab",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        }
+      ]
+    }
+  ],
+  "dependency_files": [],
+  "scan": {
+    "analyzer": {
+      "id": "gemnasium-maven",
+      "name": "gemnasium-maven",
+      "vendor": {
+        "name": "GitLab"
+      },
+      "version": "5.0.0"
+    },
+    "scanner": {
+      "id": "gemnasium-maven",
+      "name": "gemnasium-maven",
+      "vendor": {
+        "name": "GitLab"
+      },
+      "version": "5.0.0"
+    },
+    "type": "dependency_scanning",
+    "start_time": "2026-10-14T08:00:00",
+    "end_time": "2026-10-14T08:01:00",
+    "status": "success"
+  }
+}

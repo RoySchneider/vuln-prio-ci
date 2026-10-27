@@ -1,0 +1,31 @@
+# Beispiel: .gitlab-ci.yml eines Produkts mit Scannern und Priorisierung.
+# Die drei Scanner-Jobs werden ergaenzt, damit ihre Berichte als normale Artefakte vorliegen;
+# die GitLab-Vorlagen legen sie sonst nur unter artifacts:reports ab, und Folgejobs erhalten sie nicht.
+# Die Jobnamen haengen von den eingesetzten Analysatoren ab (etwa gemnasium-maven-dependency_scanning).
+
+stages:
+  - build
+  - test
+
+include:
+  - template: Jobs/SAST.gitlab-ci.yml
+  - template: Jobs/Dependency-Scanning.gitlab-ci.yml
+  - template: Jobs/Container-Scanning.gitlab-ci.yml
+  - project: "example-organisation/vuln-prio-ci"
+    ref: main
+    file: "/templates/prioritize.gitlab-ci.yml"
+
+semgrep-sast:
+  artifacts:
+    paths:
+      - gl-sast-report.json
+
+gemnasium-maven-dependency_scanning:
+  artifacts:
+    paths:
+      - gl-dependency-scanning-report.json
+
+container_scanning:
+  artifacts:
+    paths:
+      - gl-container-scanning-report.json

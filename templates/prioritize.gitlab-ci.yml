@@ -1,0 +1,97 @@
+# Priorisierung der Sicherheitsbefunde (vuln-prio-ci) als Stufe der GitLab-Pipeline eines Produkts.
+#
+# Einbindung in die .gitlab-ci.yml des Produkts (Beispiel: examples/product.gitlab-ci.yml):
+#   include:
+#     - project: "example-organisation/vuln-prio-ci"
+#       ref: main
+#       file: "/templates/prioritize.gitlab-ci.yml"
+#
+# Betriebsart 1 (vuln-prioritize): Befunde des Laufs aus den Berichten von SAST, Dependency und
+#   Container Scanning. Die Scanner-Jobs muessen ihre Berichte zusaetzlich unter artifacts:paths
+#   ablegen, sonst erhaelt dieser Job sie nicht.
+# Betriebsart 2 (vuln-prioritize-inventory): taeglich, Bestand des Hauptzweigs, nur Verfahren 1.
+#   Zeitgesteuerte Pipeline mit der Variablen PRIO_INVENTORY=true anlegen; GITLAB_API_TOKEN
+#   (Projekt-Zugriffstoken, Scope read_api, maskiert) als CI/CD-Variable hinterlegen.
+#
+# Exit-Codes 3, 4, 5 = Warnung (Pipeline laeuft weiter); jeder andere Code = technischer Fehler.
+
+variables:
+  PRIO_PROJECT_PATH: "example-organisation/vuln-prio-ci"
+  # Im Betrieb ueber den Digest festschreiben (Image@sha256:...)
+  PRIO_IMAGE: "$CI_REGISTRY/$PRIO_PROJECT_PATH:latest"
+  PRIO_ASSESSMENTS: "security/prioritization-assessments.yaml"
+  PRIO_MAX_AGE_DAYS: "2"
+  PRIO_IMAGE_PATH: "Dockerfile"
+
+.vuln-prio:
+  stage: .post
+  image: $PRIO_IMAGE
+  variables:
+    CACHE_DIR: "$CI_PROJECT_DIR/reference-bundle"
+  before_script:
+    # Fehlt das Signalpaket, scheitert der Lauf nur, wenn Befunde mit CVE zu priorisieren sind.
+    - python -m vuln_prio_ci fetch-bundle --project "$PRIO_PROJECT_PATH" || echo "WARNUNG Signalpaket nicht geladen"
+  allow_failure:
+    exit_codes: [3, 4, 5]
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - prioritization.json
+    reports:
+      codequality: gl-code-quality-report.json
+
+vuln-prioritize:
+  extends: .vuln-prio
+  needs:
+    - job: semgrep-sast
+      artifacts: true
+      optional: true
+    - job: gemnasium-dependency_scanning
+      artifacts: true
+      optional: true
+    - job: gemnasium-maven-dependency_scanning
+      artifacts: true
+      optional: true
+    - job: gemnasium-python-dependency_scanning
+      artifacts: true
+      optional: true
+    - job: dependency-scanning
+      artifacts: true
+      optional: true
+    - job: container_scanning
+      artifacts: true
+      optional: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    # Die Scanner-Vorlagen (stabile Fassung) laufen in Branch-Pipelines; in Merge-Request-Pipelines
+    # nur mit den latest-Vorlagen. Dann PRIO_MR_PIPELINES=true setzen.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $PRIO_MR_PIPELINES == "true"
+    - if: $CI_COMMIT_BRANCH
+  script:
+    - >-
+      python -m vuln_prio_ci run
+      --report-dir "$CI_PROJECT_DIR"
+      --assessments "$PRIO_ASSESSMENTS"
+      --max-age-days "$PRIO_MAX_AGE_DAYS"
+      --image-path "$PRIO_IMAGE_PATH"
+      --output prioritization.json
+      --codequality gl-code-quality-report.json
+
+vuln-prioritize-inventory:
+  extends: .vuln-prio
+  needs: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $PRIO_INVENTORY == "true"
+  script:
+    - python -m vuln_prio_ci export-inventory --project "$CI_PROJECT_ID" --output inventory.csv
+    - >-
+      python -m vuln_prio_ci run
+      --gitlab-csv inventory.csv
+      --cve-only
+      --assessments "$PRIO_ASSESSMENTS"
+      --max-age-days "$PRIO_MAX_AGE_DAYS"
+      --image-path "$PRIO_IMAGE_PATH"
+      --output prioritization.json
+      --codequality gl-code-quality-report.json

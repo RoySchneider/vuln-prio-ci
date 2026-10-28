@@ -206,3 +206,36 @@ def test_inventory_mode_cve_only(workspace):
     assert outcome.exit_code == run.EXIT_IMMEDIATE
     # Einschätzung des ausgelassenen SAST-Befunds gilt nicht als verwaist, die VEX-Aussage ohne Befund schon
     assert outcome.orphaned == ["CVE-2025-30208:vite"]
+
+
+def test_single_cves_only_in_terminal(workspace, capsys, monkeypatch):
+    monkeypatch.chdir(workspace)
+    before = sorted(p.name for p in workspace.parent.rglob("*"))
+    code = ci_cli.main(["run", "--cve", "cve-2021-44228", "--cve", "CVE-2021-44228", "--cve", "CVE-2022-3517",
+                        "--today", "2026-10-14"])
+    out = capsys.readouterr().out
+    assert code == run.EXIT_IMMEDIATE
+    assert out.count("CVE-2021-44228: Sofort") == 1                    # Groß-/Kleinschreibung, doppelt
+    assert "CVSS 10.0 (NVD Primary 3.1)" in out
+    assert "CVE-2022-3517: " in out                                    # auch niedrige Stufen
+    assert "Exit-Code 5" in out
+    assert sorted(p.name for p in workspace.parent.rglob("*")) == before   # keine Dateien
+
+
+def test_single_cve_invalid_or_conflicting(workspace, capsys):
+    assert ci_cli.main(["run", "--cve", "CVE-21-1"]) == 1
+    assert "ungültige CVE-Kennung: CVE-21-1" in capsys.readouterr().err
+    for extra in (["--output", "p.json"], ["--gitlab-csv", "inventory.csv"], ["--report-dir", "."]):
+        with pytest.raises(SystemExit) as exc:
+            ci_cli.main(["run", "--cve", "CVE-2021-44228", *extra])
+        assert exc.value.code == 2
+
+
+def test_single_cve_without_bundle(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "leer"))
+    get_settings.cache_clear()
+    try:
+        assert ci_cli.main(["run", "--cve", "CVE-2021-44228"]) == 1
+        assert "FEHLER" in capsys.readouterr().err
+    finally:
+        get_settings.cache_clear()

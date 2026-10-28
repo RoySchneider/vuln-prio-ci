@@ -135,6 +135,18 @@ python -m vuln_prio_ci run --report-dir . --assessments security/prioritization-
 | `--cve-only` | nur Befunde mit CVE (Verfahren 1) |
 | `--default-exposure` | Erreichbarkeit, wenn keine angegeben ist (`remote`, `intern`, `lokal`; Standard `remote`) |
 | `--online` | EUVD-Einzelabruf erlauben (Standard: aus) |
+| `--cve ID` | einzelne CVE priorisieren (mehrfach möglich), Ausgabe nur im Terminal |
+
+Einzelne CVEs ohne Bericht (Verfahren 1, CVSS-Basiswert aus der NVD im Referenzdatenspeicher):
+
+```
+python -m vuln_prio_ci run --cve CVE-2021-44228 --cve CVE-2023-0464
+```
+
+Das Ergebnis steht nur im Terminal: je CVE Stufe, Rang, CVSS-Basiswert und Begründung, auch für
+Planmäßig und Zurückgestellt. Es entstehen keine Dateien; `--cve` lässt sich deshalb nicht mit
+`--report`, `--report-dir`, `--gitlab-csv`, `--output` oder `--codequality` kombinieren. Die
+Referenzdaten (Schritt 1) müssen vorhanden sein, die Exit-Codes gelten wie unten.
 
 Zwei Betriebsarten:
 
@@ -143,6 +155,15 @@ Zwei Betriebsarten:
 
 Den Export holt `python -m vuln_prio_ci export-inventory --project $CI_PROJECT_ID --output inventory.csv`
 (Vulnerability Export API, nur Ultimate; braucht `GITLAB_API_TOKEN` mit Scope `read_api`).
+
+**Testdaten:** `examples/cve-list.txt` enthält 344 CVE-Kennungen (270 verschiedene; Mehrfachnennungen
+wie in einem Bestand, in dem eine CVE mehrere Pakete betrifft). `examples/cve-inventory.csv` ist
+dieselbe Liste im Format des CSV-Exports, eine Zeile je Eintrag, ohne Paket und CVSS-Vektor. Nach
+dem Bezug der Referenzdaten (Schritt 1):
+
+```
+python -m vuln_prio_ci run --gitlab-csv examples/cve-inventory.csv --cve-only --output prioritization.json
+```
 
 ### 3. Ergebnis und Exit-Code
 
@@ -220,7 +241,8 @@ vuln-prio-ci/
 │   └── models/                Pydantic-Schemata und Enums
 ├── doc/                       Dokumentation der Datenerhebung je Skript in src/vuln_prio_ci/sources
 ├── templates/prioritize.gitlab-ci.yml   Vorlage zum Einbinden in Produkt-Pipelines
-├── examples/                  product.gitlab-ci.yml, prioritization-assessments.yaml
+├── examples/                  product.gitlab-ci.yml, prioritization-assessments.yaml,
+│                              cve-list.txt + cve-inventory.csv (Testdaten)
 ├── .gitlab-ci.yml             eigene Pipeline: Tests, Image, tägliches Informationspaket
 ├── Dockerfile                 Image für die Jobs (kein Dienst, kein Port)
 ├── requirements*.txt          Untergrenzen; requirements*.lock: feste Versionen mit Hashes

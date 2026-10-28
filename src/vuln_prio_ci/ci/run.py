@@ -27,7 +27,7 @@ from ..ingest import assessments as assessments_mod
 from ..ingest import gitlab_report
 from ..ingest.gitlab_semgrep import parse_csv_with_stats
 from ..models import ExposureLevel, PrioritizationResult, PriorityLevel, RawFinding
-from ..normalize.identifiers import normalize
+from ..normalize.identifiers import _CVE_RE, normalize
 from ..pipeline import SkippedFinding, prioritize_findings
 from . import codequality, freshness
 
@@ -74,6 +74,8 @@ class RunOptions:
         Disable live EUVD lookups.
     today : date or None
         Reference day for the freshness check. Defaults to the current day.
+    cves : list[str]
+        CVE identifiers prioritised directly, without a report (output only in the terminal).
     """
 
     reports: list[Path] = field(default_factory=list)
@@ -88,6 +90,7 @@ class RunOptions:
     image_path: str = "Dockerfile"
     offline: bool = True
     today: Optional[date] = None
+    cves: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -147,8 +150,8 @@ def _load_findings(opts: RunOptions) -> tuple[list[RawFinding], list[str], dict]
     Raises
     ------
     RunError
-        If no input is given, a report is missing or invalid, or the CSV export
-        is not found.
+        If no input is given, a report is missing or invalid, the CSV export
+        is not found, or a CVE identifier is invalid.
     """
     paths = list(opts.reports)
     if opts.report_dir is not None:
@@ -177,9 +180,42 @@ def _load_findings(opts: RunOptions) -> tuple[list[RawFinding], list[str], dict]
         findings += rows
         inputs.append(Path(opts.gitlab_csv).name)
         status_skipped = dict(skipped)
+    if opts.cves:
+        for cve in _parse_cves(opts.cves):
+            findings.append(RawFinding(title=cve, identifiers=[cve],
+                                       raw={"finding_id": cve, "report_type": None}))
+        inputs.append("--cve")
     if not inputs:
-        raise RunError("keine Eingabe: --report, --report-dir oder --gitlab-csv angeben")
+        raise RunError("keine Eingabe: --report, --report-dir, --gitlab-csv oder --cve angeben")
     return findings, inputs, status_skipped
+
+
+def _parse_cves(values: list[str]) -> list[str]:
+    """Check and normalise CVE identifiers given on the command line.
+
+    Parameters
+    ----------
+    values : list[str]
+        CVE identifiers as given, in any case.
+
+    Returns
+    -------
+    list[str]
+        Identifiers in upper case, without duplicates, in the given order.
+
+    Raises
+    ------
+    RunError
+        If a value is not a CVE identifier.
+    """
+    cves: list[str] = []
+    for value in values:
+        cve = value.strip().upper()
+        if not _CVE_RE.fullmatch(cve):
+            raise RunError(f"ungültige CVE-Kennung: {value}")
+        if cve not in cves:
+            cves.append(cve)
+    return cves
 
 
 def execute(opts: RunOptions) -> RunOutcome:
@@ -358,17 +394,7 @@ def render_log(outcome: RunOutcome, assessments_path: Optional[Path]) -> str:
     if outcome.status_skipped:
         lines.append("  nach Status nicht übernommen: "
                      + ", ".join(f"{k}: {v}" for k, v in outcome.status_skipped.items()))
-    fresh = outcome.freshness
-    if fresh is not None:
-        epss = (fresh.sources.get("epss") or {})
-        created = fresh.created_at or "ohne Manifest"
-        lines.append(f"Signalpaket: erstellt {created}, Alter {fresh.age_days} Tag(e), "
-                     f"Höchstalter {fresh.max_age_days}; EPSS {epss.get('score_date')} "
-                     f"(Modell {epss.get('model_version')})")
-        if fresh.stale:
-            lines.append("WARNUNG: Signalpaket älter als das Höchstalter – Ergebnis eingeschränkt.")
-        if fresh.missing_sources:
-            lines.append("WARNUNG: Quellen fehlen im Signalpaket: " + ", ".join(fresh.missing_sources))
+    lines += _freshness_lines(outcome.freshness)
 
     for r in _sorted(outcome.results):
         if r.priority not in (PriorityLevel.immediate, PriorityLevel.urgent):
@@ -398,5 +424,49 @@ def render_log(outcome: RunOutcome, assessments_path: Optional[Path]) -> str:
                      + ", ".join(outcome.orphaned))
     for warning in outcome.warnings:
         lines.append(f"Hinweis Einschätzungsdatei: {warning}")
+    lines.append(f"Exit-Code {outcome.exit_code}: {_EXIT_TEXT[outcome.exit_code]}")
+    return "\n".join(lines)
+
+
+def _freshness_lines(fresh: Optional[freshness.Freshness]) -> list[str]:
+    """Describe the state of the signal bundle for the log; empty without a freshness check."""
+    if fresh is None:
+        return []
+    epss = (fresh.sources.get("epss") or {})
+    created = fresh.created_at or "ohne Manifest"
+    lines = [f"Signalpaket: erstellt {created}, Alter {fresh.age_days} Tag(e), "
+             f"Höchstalter {fresh.max_age_days}; EPSS {epss.get('score_date')} "
+             f"(Modell {epss.get('model_version')})"]
+    if fresh.stale:
+        lines.append("WARNUNG: Signalpaket älter als das Höchstalter – Ergebnis eingeschränkt.")
+    if fresh.missing_sources:
+        lines.append("WARNUNG: Quellen fehlen im Signalpaket: " + ", ".join(fresh.missing_sources))
+    return lines
+
+
+def render_cves(outcome: RunOutcome) -> str:
+    """Render the terminal output of a run with ``--cve``.
+
+    Unlike `render_log`, every CVE is listed with its level, whatever the level.
+
+    Parameters
+    ----------
+    outcome : RunOutcome
+        Outcome of a run with CVE identifiers as input.
+
+    Returns
+    -------
+    str
+        One block per CVE (level, rank, CVSS, rationale), the bundle state and the exit code.
+    """
+    lines: list[str] = []
+    for r in _sorted(outcome.results):
+        rank = f", Rang {r.priority_rank}" if r.priority_rank is not None else ""
+        lines.append(f"{r.cve_id or r.title}: {codequality.LEVEL_LABEL[r.priority]}{rank}")
+        cvss_text = (f"{r.cvss_base_score} ({r.cvss_source})" if r.cvss_base_score is not None
+                     else "kein Basiswert")
+        lines.append(f"    CVSS {cvss_text}")
+        lines.append(f"    {r.decision_note}")
+    lines += _freshness_lines(outcome.freshness)
     lines.append(f"Exit-Code {outcome.exit_code}: {_EXIT_TEXT[outcome.exit_code]}")
     return "\n".join(lines)

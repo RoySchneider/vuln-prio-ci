@@ -5,6 +5,8 @@
                                         Operating mode 1: findings of the pipeline run (report artifacts)
     python -m vuln_prio_ci run --gitlab-csv inventory.csv --cve-only --output prioritization.json
                                         Operating mode 2: inventory of the main branch (export), method 1 only
+    python -m vuln_prio_ci run --cve CVE-2021-44228 [--cve ...]
+                                        prioritise single CVEs, output only in the terminal
     python -m vuln_prio_ci fetch-bundle --project gruppe/vuln-prio-ci
                                         load the latest signal bundle into CACHE_DIR
     python -m vuln_prio_ci publish-bundle --project $CI_PROJECT_ID
@@ -55,12 +57,17 @@ def _cmd_run(args) -> int:
         image_path=args.image_path,
         offline=not args.online,
         today=args.today,
+        cves=args.cve,
     )
     try:
         outcome = run.execute(opts)
     except run.RunError as exc:
         print(f"FEHLER: {exc}", file=sys.stderr)
         return run.EXIT_ERROR
+    if opts.cves:
+        # Single CVEs: result only in the terminal, no files
+        print(run.render_cves(outcome))
+        return outcome.exit_code
     run.write_outputs(outcome, opts)
     print(run.render_log(outcome, opts.assessments))
     return outcome.exit_code
@@ -156,6 +163,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--report", action="append", default=[], help="GitLab-Sicherheitsbericht (mehrfach)")
     p.add_argument("--report-dir", help="Verzeichnis mit gl-sast/-dependency-scanning/-container-scanning-report.json")
     p.add_argument("--gitlab-csv", help="CSV-Export des Vulnerability Reports (Betriebsart 2)")
+    p.add_argument("--cve", action="append", default=[],
+                   help="CVE-Kennung priorisieren, Ausgabe nur im Terminal (mehrfach)")
     p.add_argument("--assessments", help="Einschätzungsdatei (YAML) im Repository")
     p.add_argument("--output", help="Ergebnisdatei (JSON)")
     p.add_argument("--codequality", help="Code-Quality-Bericht (JSON) für artifacts:reports:codequality")
@@ -187,6 +196,12 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=_cmd_export)
 
     args = parser.parse_args(argv)
+    if args.command == "run" and args.cve:
+        conflicting = [name for name, value in (("--report", args.report), ("--report-dir", args.report_dir),
+                                                ("--gitlab-csv", args.gitlab_csv), ("--output", args.output),
+                                                ("--codequality", args.codequality)) if value]
+        if conflicting:
+            parser.error(f"--cve nicht zusammen mit {', '.join(conflicting)} (Ausgabe nur im Terminal)")
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
     if args.command != "run" or args.online:
         # Network access only with a cleaned-up CA bundle (vuln_prio_ci/tls.py)

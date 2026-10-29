@@ -1,51 +1,50 @@
-# `__main__.py` – Kommandozeile für den Bezug
+# `__main__.py` – command line for retrieval
 
-Mit `python -m vuln_prio_ci.sources <Quelle>` werden die Bezugsskripte angestoßen, manuell oder
-zeitgesteuert.
+`python -m vuln_prio_ci.sources <source>` triggers the retrieval scripts, manually or on a schedule.
 
-## Befehle
+## Commands
 
-| Befehl | Wirkung |
+| Command | Effect |
 | --- | --- |
-| `epss` | jüngste EPSS-Tagesdatei beziehen |
-| `epss --date JJJJ-MM-TT` | Tagesdatei eines Stichtags beziehen (wird angeheftet) |
-| `exploitdb [--ref SHA]` | Exploit-DB: Branch `main` bzw. angegebener Commit (angeheftet) |
-| `metasploit [--ref SHA]` | Metasploit: Branch `master` bzw. angegebener Commit (angeheftet) |
-| `exploitdb`/`metasploit` `--as-of JJJJ-MM-TT` | letzter Commit bis Ende des Stichtags (angeheftet), für die Evaluation zum Beobachtungszeitpunkt T |
-| `kev` | KEV-Dump laden (kumulativ, kein Snapshot und keine Anheftung nötig) |
-| `nvd [--full]` | CVSS-Basiswerte der NVD, inkrementell bzw. vollständig |
-| `all` | alle Quellen mit jeweils jüngstem Stand (für den Zeitplan) |
-| `manifest` | `bundle-manifest.json` in `CACHE_DIR` schreiben |
-| `unpin epss JJJJ-MM-TT` | Anheftung eines EPSS-Snapshots aufheben, danach Aufbewahrung anwenden |
-| `unpin exploitdb`/`metasploit SHA` | Anheftung eines Exploit-Snapshots aufheben (SHA auch gekürzt, muss eindeutig sein), danach Aufbewahrung anwenden |
+| `epss` | fetch the most recent EPSS daily file |
+| `epss --date YYYY-MM-DD` | fetch the daily file of a cutoff date (is pinned) |
+| `exploitdb [--ref SHA]` | Exploit-DB: branch `main` or the given commit (pinned) |
+| `metasploit [--ref SHA]` | Metasploit: branch `master` or the given commit (pinned) |
+| `exploitdb`/`metasploit` `--as-of YYYY-MM-DD` | last commit up to the end of the cutoff date (pinned), for the evaluation at observation time T |
+| `kev` | load the KEV dump (cumulative, no snapshot and no pin needed) |
+| `nvd [--full]` | CVSS base scores from the NVD, incremental or full |
+| `all` | all sources at their most recent state (for the schedule) |
+| `manifest` | write `bundle-manifest.json` to `CACHE_DIR` |
+| `unpin epss YYYY-MM-DD` | remove the pin of an EPSS snapshot, then apply retention |
+| `unpin exploitdb`/`metasploit SHA` | remove the pin of an exploit snapshot (SHA may be abbreviated, must be unambiguous), then apply retention |
 
-`--ref` und `--as-of` schließen einander aus.
+`--ref` and `--as-of` are mutually exclusive.
 
-## Ablauf
+## Flow
 
-1. **Manifest und Anheftung**: `manifest` schreibt nur das Manifest und endet. `unpin` arbeitet nur
-   auf `reference.sqlite` (ohne Netzzugriff und ohne CA-Prüfung) und endet mit Exit-Code 1, wenn der
-   Snapshot unbekannt oder die gekürzte SHA mehrdeutig ist.
-2. **CA-Bundle prüfen**: Vor jedem Netzzugriff wird geprüft, dass das installierte `certifi` nicht
-   älter als 2026.10.19 ist (eMudhra/emSign-Vorfall, `tls.py`). Ist es älter, endet der Befehl mit
-   Fehlermeldung und Exit-Code 1.
-3. **Quellen ausführen**: Bei `all` in dieser Reihenfolge: EPSS, Exploit-DB, Metasploit, KEV, NVD.
-   Die Quellen laufen unabhängig voneinander; scheitert eine, werden die übrigen trotzdem versucht.
-   `manifest` gehört nicht zu `all` und wird extra aufgerufen.
+1. **Manifest and unpinning**: `manifest` writes only the manifest and ends. `unpin` works only on
+   `reference.sqlite` (without network access and without CA check) and ends with exit code 1 if the
+   snapshot is unknown or the abbreviated SHA is ambiguous.
+2. **Check the CA bundle**: Before any network access it is checked that the installed `certifi` is
+   not older than 2026.10.19 (eMudhra/emSign incident, `tls.py`). If it is older, the command ends
+   with an error message and exit code 1.
+3. **Run the sources**: For `all` in this order: EPSS, Exploit-DB, Metasploit, KEV, NVD. The sources
+   run independently of each other; if one fails, the others are still attempted. `manifest` is not
+   part of `all` and is called separately.
 
-## KEV-Dump
+## KEV dump
 
-Der KEV-Dump wird nicht in `sources/` erhoben, sondern über `enrich/kev.py::refresh`. Er stammt vom
-Endpunkt `<euvd_base_url>/kev/dump` der EUVD (ENISA), der CISA KEV und EU KEV vereint. Die Datei wird
-unverändert als `kev-dump.json` im Cache-Verzeichnis abgelegt; schlägt der Abruf fehl, ist das ein
-Bezugsfehler.
+The KEV dump is not collected in `sources/` but via `enrich/kev.py::refresh`. It comes from the
+endpoint `<euvd_base_url>/kev/dump` of the EUVD (ENISA), which combines CISA KEV and EU KEV. The file
+is stored unchanged as `kev-dump.json` in the cache directory; if the download fails, that is a
+retrieval error.
 
-## Ausgabe und Exit-Code
+## Output and exit code
 
-Je Quelle wird eine Zusammenfassung ausgegeben, zum Beispiel Zahl der CVEs bzw. Referenzen, ob der
-Snapshot gespeichert wurde oder unverändert war, und welche Snapshots entfernt wurden.
+For each source a summary is printed, for example the number of CVEs or references, whether the
+snapshot was stored or unchanged, and which snapshots were removed.
 
-| Exit-Code | Bedeutung |
+| Exit code | Meaning |
 | --- | --- |
-| `0` | alle gewählten Quellen erfolgreich |
-| `1` | mindestens ein Bezug fehlgeschlagen oder CA-Bundle veraltet |
+| `0` | all selected sources succeeded |
+| `1` | at least one retrieval failed or the CA bundle is outdated |

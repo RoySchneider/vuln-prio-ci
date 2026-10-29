@@ -1,32 +1,32 @@
-# `manifest.py` – Stand des Informationspakets
+# `manifest.py` – state of the information bundle
 
-Dieses Skript erhebt keine externen Daten. Es beschreibt, welchen Stand die bezogenen Quellen im
-Cache-Verzeichnis haben, und hält das in `bundle-manifest.json` fest.
+This script does not collect external data. It describes the state of the retrieved sources in the
+cache directory and records it in `bundle-manifest.json`.
 
-## Wozu
+## Purpose
 
-Der CI-Befehl prüft am Manifest das Höchstalter des Pakets (`ci/freshness.py`). Das Manifest wird erst
-geschrieben, nachdem alle Quellen erfolgreich bezogen wurden.
+The CI command checks the maximum age of the bundle against the manifest (`ci/freshness.py`). The
+manifest is written only after all sources have been retrieved successfully.
 
 ## `describe(cache_dir)`
 
-Liest den Stand jeder Quelle aus dem Cache-Verzeichnis. Ist ein Eintrag leer (`None`), wurde die Quelle
-noch nicht bezogen.
+Reads the state of each source from the cache directory. If an entry is empty (`None`), the source
+has not been retrieved yet.
 
-| Schlüssel | Herkunft | Inhalt |
+| Key | Origin | Content |
 | --- | --- | --- |
-| `epss` | jüngster EPSS-Snapshot in `reference.sqlite` | Bezugsdatum, Modellversion, Bezugszeitpunkt, Zeilenzahl |
-| `exploitdb` | jüngster Exploit-DB-Snapshot | Commit, Commit-Zeitpunkt, Bezugszeitpunkt, Referenzen |
-| `metasploit` | jüngster Metasploit-Snapshot | wie Exploit-DB |
-| `nvd` | Abgleichstand in `reference.sqlite` | `synced_until`, Bezugszeitpunkt, Vollbezug, Zeilenzahl |
-| `kev` | Datei `kev-dump.json` | Änderungszeit der Datei als Bezugszeitpunkt, Zahl der Einträge, jüngstes `dateAdded` |
+| `epss` | most recent EPSS snapshot in `reference.sqlite` | retrieval date, model version, time of retrieval, row count |
+| `exploitdb` | most recent Exploit-DB snapshot | commit, commit time, time of retrieval, references |
+| `metasploit` | most recent Metasploit snapshot | as for Exploit-DB |
+| `nvd` | sync state in `reference.sqlite` | `synced_until`, time of retrieval, full retrieval, row count |
+| `kev` | file `kev-dump.json` | modification time of the file as time of retrieval, number of entries, most recent `dateAdded` |
 
-Existiert `reference.sqlite` nicht, bleiben EPSS, Exploit-DB, Metasploit und NVD leer. Ist
-`kev-dump.json` unlesbar, wird sie als leere Liste gewertet.
+If `reference.sqlite` does not exist, EPSS, Exploit-DB, Metasploit and NVD remain empty. If
+`kev-dump.json` is unreadable, it is treated as an empty list.
 
 ## `write(cache_dir, created_at=None)`
 
-Schreibt `bundle-manifest.json` ins Cache-Verzeichnis:
+Writes `bundle-manifest.json` to the cache directory:
 
 ```json
 {
@@ -35,8 +35,8 @@ Schreibt `bundle-manifest.json` ins Cache-Verzeichnis:
 }
 ```
 
-`created_at` ist der Erstellungszeitpunkt des Pakets (Standard: jetzt, UTC).
+`created_at` is the creation time of the bundle (default: now, UTC).
 
 ## `read(cache_dir)`
 
-Liest das Manifest. Fehlt die Datei oder ist sie kein gültiges JSON, liefert die Funktion `None`.
+Reads the manifest. If the file is missing or not valid JSON, the function returns `None`.

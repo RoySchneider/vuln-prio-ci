@@ -1,52 +1,52 @@
-# Dokumentation: Datenerhebung in `src/vuln_prio_ci/sources`
+# Documentation: data collection in `src/vuln_prio_ci/sources`
 
-Die Skripte in `src/vuln_prio_ci/sources/` beziehen die externen Referenzdaten, die der
-Priorisierungslauf später nachschlägt. Der Bezug läuft **getrennt vom Priorisierungslauf**: Der Lauf
-selbst ruft keine externen Dienste auf, er liest nur den lokalen Referenzdatenspeicher.
+The scripts in `src/vuln_prio_ci/sources/` fetch the external reference data that the prioritization
+run looks up later. Retrieval runs **separately from the prioritization run**: the run itself calls
+no external services, it only reads the local reference data store.
 
-## Überblick
+## Overview
 
-| Skript | Quelle | Inhalt | Dokument |
+| Script | Source | Content | Document |
 | --- | --- | --- | --- |
-| `common.py` | – | gemeinsame Bausteine (HTTP-Abruf, CVE-Bereinigung, Zeitstempel) | [common.md](common.md) |
-| `epss.py` | FIRST EPSS | tägliche Ausnutzungswahrscheinlichkeit je CVE | [epss.md](epss.md) |
-| `git_snapshot.py` | – | gemeinsamer Ablauf für Quellen, die als Datei in einem Git-Repository liegen | [git_snapshot.md](git_snapshot.md) |
-| `exploitdb.py` | Exploit-DB (GitLab) | öffentliche Exploits mit CVE-Bezug | [exploitdb.md](exploitdb.md) |
-| `metasploit.py` | Metasploit (GitHub) | Metasploit-Module mit CVE-Bezug | [metasploit.md](metasploit.md) |
-| `nvd.py` | NVD CVE API 2.0 | CVSS-Basiswerte je CVE | [nvd.md](nvd.md) |
-| `manifest.py` | – | Stand des Informationspakets (`bundle-manifest.json`) | [manifest.md](manifest.md) |
-| `__main__.py` | – | Kommandozeile, die die Bezüge anstößt | [main.md](main.md) |
+| `common.py` | – | shared building blocks (HTTP download, CVE cleanup, timestamps) | [common.md](common.md) |
+| `epss.py` | FIRST EPSS | daily exploitation probability per CVE | [epss.md](epss.md) |
+| `git_snapshot.py` | – | shared flow for sources that live as a file in a Git repository | [git_snapshot.md](git_snapshot.md) |
+| `exploitdb.py` | Exploit-DB (GitLab) | public exploits with CVE reference | [exploitdb.md](exploitdb.md) |
+| `metasploit.py` | Metasploit (GitHub) | Metasploit modules with CVE reference | [metasploit.md](metasploit.md) |
+| `nvd.py` | NVD CVE API 2.0 | CVSS base scores per CVE | [nvd.md](nvd.md) |
+| `manifest.py` | – | state of the information bundle (`bundle-manifest.json`) | [manifest.md](manifest.md) |
+| `__main__.py` | – | command line that triggers the retrievals | [main.md](main.md) |
 
-Der KEV-Dump wird nicht in `sources/` erhoben, sondern in `enrich/kev.py` (EUVD-Dump). Der Aufruf
-läuft aber über dieselbe Kommandozeile; siehe [main.md](main.md).
+The KEV dump is not collected in `sources/` but in `enrich/kev.py` (EUVD dump). It is invoked through
+the same command line, though; see [main.md](main.md).
 
-## Gemeinsames Prinzip
+## Common principle
 
-1. **Abruf**: Eine Datei oder API-Seite wird per HTTP geladen (`common.download`, `common.get_json`).
-2. **Prüfung**: Der Inhalt wird vollständig geprüft, bevor etwas gespeichert wird. Ein Fehler
-   verwirft den ganzen Bezug (`SourceError`), damit kein halber Snapshot entsteht.
-3. **Ablage**: Das Ergebnis landet in der SQLite-Datei `reference.sqlite` im Cache-Verzeichnis
-   (`CACHE_DIR`, Standard `./cache`), siehe `src/vuln_prio_ci/store/`. Die Datenbank läuft im
-   WAL-Modus, sodass gelesen werden kann, während ein Bezug schreibt.
-4. **Aufbewahrung**: Je Quelle bleiben die jüngsten `keep` Snapshots erhalten. Ausdrücklich für ein
-   Datum oder einen Commit bezogene Snapshots sind **angeheftet** (`pinned`) und werden nie entfernt.
-5. **Manifest**: Erst danach wird `bundle-manifest.json` geschrieben (`manifest.py`), das den Stand
-   jeder Quelle festhält.
+1. **Download**: A file or API page is loaded via HTTP (`common.download`, `common.get_json`).
+2. **Validation**: The content is validated completely before anything is stored. An error discards
+   the entire retrieval (`SourceError`) so that no half snapshot is created.
+3. **Storage**: The result is stored in the SQLite file `reference.sqlite` in the cache directory
+   (`CACHE_DIR`, default `./cache`), see `src/vuln_prio_ci/store/`. The database runs in WAL mode so
+   that it can be read while a retrieval is writing.
+4. **Retention**: For each source the most recent `keep` snapshots are retained. Snapshots fetched
+   explicitly for a date or a commit are **pinned** (`pinned`) and never removed.
+5. **Manifest**: Only afterwards is `bundle-manifest.json` written (`manifest.py`), which records the
+   state of each source.
 
-## Konfiguration
+## Configuration
 
-Alle URLs und Aufbewahrungsgrenzen stehen in `src/vuln_prio_ci/config.py` und lassen sich über
-Umgebungsvariablen oder `.env` überschreiben.
+All URLs and retention limits are in `src/vuln_prio_ci/config.py` and can be overridden via
+environment variables or `.env`.
 
-| Einstellung | Standard | Verwendet von |
+| Setting | Default | Used by |
 | --- | --- | --- |
 | `epss_bulk_base_url` | `https://epss.empiricalsecurity.com` | `epss.py` |
 | `epss_keep_snapshots` | `30` | `epss.py` |
-| `exploitdb_commit_url`, `exploitdb_commits_until_url`, `exploitdb_file_url` | GitLab-API bzw. Raw-Datei | `exploitdb.py` |
-| `metasploit_commit_url`, `metasploit_commits_until_url`, `metasploit_file_url` | GitHub-API bzw. Raw-Datei | `metasploit.py` |
+| `exploitdb_commit_url`, `exploitdb_commits_until_url`, `exploitdb_file_url` | GitLab API and raw file respectively | `exploitdb.py` |
+| `metasploit_commit_url`, `metasploit_commits_until_url`, `metasploit_file_url` | GitHub API and raw file respectively | `metasploit.py` |
 | `exploit_keep_snapshots` | `30` | `exploitdb.py`, `metasploit.py` |
 | `nvd_api_url` | `https://services.nvd.nist.gov/rest/json/cves/2.0` | `nvd.py` |
-| `nvd_api_key` | leer | `nvd.py` |
-| `cache_dir` | `./cache` | alle |
+| `nvd_api_key` | empty | `nvd.py` |
+| `cache_dir` | `./cache` | all |
 
-Der Wert `0` bei `*_keep_snapshots` bedeutet: nichts entfernen, alle Snapshots behalten.
+The value `0` for `*_keep_snapshots` means: remove nothing, keep all snapshots.

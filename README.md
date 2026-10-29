@@ -1,42 +1,42 @@
 # vuln-prio-ci
 
-Priorisierung von Sicherheitsbefunden als Stufe der GitLab-Pipeline eines Produkts.
+Prioritization of security findings as a stage of a product's GitLab pipeline.
 
-Das Projekt liest die Sicherheitsberichte eines Pipeline-Laufs (SAST, Dependency Scanning, Container
-Scanning) oder den CSV-Export des GitLab-Vulnerability-Reports und ordnet jeden Befund einer
-Prioritätsstufe zu: **Sofort**, **Außerplanmäßig**, **Planmäßig** oder **Zurückgestellt**. Es läuft
-als Kommandozeilenprogramm und als Image in einem Pipeline-Job.
+The project reads the security reports of a pipeline run (SAST, Dependency Scanning, Container
+Scanning) or the CSV export of the GitLab Vulnerability Report and assigns each finding to a
+priority level: **Sofort** (immediate), **Außerplanmäßig** (out of schedule), **Planmäßig**
+(scheduled) or **Zurückgestellt** (deferred). It runs as a command-line program and as an image in a
+pipeline job. The level names are the values the tool outputs and are kept in German below.
 
-## Funktionsweise
+## How it works
 
-Jeder Befund durchläuft diese Schritte (`src/vuln_prio_ci/pipeline.py`):
+Each finding goes through these steps (`src/vuln_prio_ci/pipeline.py`):
 
-1. **Einlesen** der GitLab-Sicherheitsberichte bzw. des CSV-Exports (`ingest/`).
-2. **Kennung bestimmen** (`normalize/`): CVE, sonst EUVD/GHSA, sonst der CVE-lose Zweig mit
-   Fingerabdruck als stabiler Identität.
-3. **Einschätzungen anwenden**: VEX-Aussagen und Einschätzungen des Entwicklungsteams aus einer Datei
-   im Repository des Produkts. Befunde mit VEX-Status `not_affected` oder `fixed` werden nicht
-   priorisiert.
-4. **Anreichern** (`enrich/`): EPSS, KEV, Exploit-DB, Metasploit und CVSS-Basiswert aus dem lokalen
-   Referenzdatenspeicher.
-5. **Entscheiden** (`decide/`): Die Prioritätsstufe und ein Rang kommen aus einer Regeltabelle.
+1. **Ingest** the GitLab security reports or the CSV export (`ingest/`).
+2. **Determine the identifier** (`normalize/`): CVE, otherwise EUVD/GHSA, otherwise the CVE-less
+   branch with a fingerprint as stable identity.
+3. **Apply assessments**: VEX statements and assessments by the development team from a file in the
+   product's repository. Findings with VEX status `not_affected` or `fixed` are not prioritized.
+4. **Enrich** (`enrich/`): EPSS, KEV, Exploit-DB, Metasploit and CVSS base score from the local
+   reference data store.
+5. **Decide** (`decide/`): The priority level and a rank come from a rule table.
 
-Zwei Verfahren, je nachdem, ob eine CVE aufgelöst werden konnte:
+Two methods, depending on whether a CVE could be resolved:
 
-| Verfahren | Fall | Eingang der Regeltabelle | Tabelle |
+| Method | Case | Input of the rule table | Table |
 |---|---|---|---|
-| 1 | mit CVE | Nachweisgrad (E1–E6) × CVSS-Bereich (C1–C3) | `rules/decision_table_cve.csv` (18 Zeilen) |
-| 2 | ohne CVE | Ausnutzungslage × Erreichbarkeit × technische Auswirkung × Schutzbedarf | `rules/decision_table_cveless.csv` (54 Zeilen) |
+| 1 | with CVE | evidence level (E1–E6) × CVSS band (C1–C3) | `rules/decision_table_cve.csv` (18 rows) |
+| 2 | without CVE | exploitation status × reachability × technical impact × protection need | `rules/decision_table_cveless.csv` (54 rows) |
 
-Der Priorisierungslauf ruft **keine externen Dienste** auf. Die Informationen stammen aus einem täglich
-erzeugten Informationspaket (siehe [Informationspaket](#informationspaket)). Ein Treffer ohne Regelzeile wird nicht auf
-einen Standardwert abgebildet, sondern ist ein Fehler.
+The prioritization run calls **no external services**. The information comes from a daily generated
+information bundle (see [Information bundle](#information-bundle)). A hit without a rule row is not
+mapped to a default value but is an error.
 
 ## Installation
 
-Voraussetzung ist Python 3.15 (`requires-python >= 3.15`).
+Python 3.15 is required (`requires-python >= 3.15`).
 
-### Lokal (Windows)
+### Local (Windows)
 
 ```
 py -3.15 -m venv .venv
@@ -45,25 +45,25 @@ py -3.15 -m venv .venv
 .venv\Scripts\python -m pytest -q
 ```
 
-**Der erste Schritt (pip auf 26.2.2) ist für jedes neue venv Pflicht**, siehe
-[Sicherheitshinweis](#sicherheitshinweis-emudhraemsign-vorfall-oktober-2026).
+**The first step (pip to 26.2.2) is mandatory for every new venv**, see
+[Security notice](#security-notice-emudhraemsign-incident-october-2026).
 
-Linux und macOS entsprechend mit `python3.15 -m venv .venv` und `.venv/bin/python`. Die Lock-Dateien
-gelten für Linux x86_64 (Image und Pipeline). Lokal unter Windows stattdessen `requirements-dev.txt`
-verwenden; dessen Untergrenzen erzwingen ebenfalls certifi ≥ 2026.10.19.
+On Linux and macOS use `python3.15 -m venv .venv` and `.venv/bin/python` accordingly. The lock files
+apply to Linux x86_64 (image and pipeline). Locally on Windows use `requirements-dev.txt` instead;
+its lower bounds also enforce certifi ≥ 2026.10.19.
 
-Wer das Paket als Befehl braucht:
+If you need the package as a command:
 
 ```
 pip install -e .
 ```
 
-Danach stehen `vuln-prio-ci` (entspricht `python -m vuln_prio_ci`) und `vuln-prio-sources`
-(entspricht `python -m vuln_prio_ci.sources`) zur Verfügung.
+This provides `vuln-prio-ci` (equivalent to `python -m vuln_prio_ci`) and `vuln-prio-sources`
+(equivalent to `python -m vuln_prio_ci.sources`).
 
-Liegt das venv unter einem sehr langen Pfad, scheitert `ensurepip` unter Windows an der
-Pfadlängengrenze von 260 Zeichen (Fehler `No package metadata was found`). Dann das venv an einem
-kürzeren Pfad anlegen oder lange Pfade in Windows freischalten.
+If the venv is located under a very long path, `ensurepip` on Windows fails at the 260-character path
+length limit (error `No package metadata was found`). In that case create the venv at a shorter path
+or enable long paths in Windows.
 
 ### Image
 
@@ -71,15 +71,15 @@ kürzeren Pfad anlegen oder lange Pfade in Windows freischalten.
 docker build --pull --no-cache -t vuln-prio-ci .
 ```
 
-Das Image (`python:3.15-slim`) installiert die Abhängigkeiten aus `requirements.lock` mit
-`--require-hashes`. Der Bau bricht ab, wenn certifi oder pip nicht dem bereinigten Stand entsprechen.
+The image (`python:3.15-slim`) installs the dependencies from `requirements.lock` with
+`--require-hashes`. The build aborts if certifi or pip do not match the patched version.
 
-Das Image enthält ein Kommandozeilenprogramm, keinen Dienst: Jedes `docker run` führt einen Befehl
-aus und beendet sich. Ohne Befehl gibt es die Hilfe aus. Der Referenzdatenspeicher sowie Berichte und
-Ergebnisdateien liegen auf dem Host und werden eingebunden; `CACHE_DIR` zeigt auf das eingebundene
-Verzeichnis, sonst geht der Speicher mit dem Container verloren. Eine lokale `.env` liest der Container
-nur über `--env-file .env`; ein `-e` hat Vorrang vor Werten aus der Datei. Beispiele für PowerShell
-aus dem Wurzelverzeichnis des Repositorys (unter Linux/macOS `\` statt Backtick zur Fortsetzung):
+The image contains a command-line program, not a service: every `docker run` executes one command and
+exits. Without a command it prints the help. The reference data store as well as reports and result
+files live on the host and are mounted in; `CACHE_DIR` points to the mounted directory, otherwise the
+store is lost with the container. The container reads a local `.env` only via `--env-file .env`; a
+`-e` takes precedence over values from the file. Examples for PowerShell from the repository root
+(on Linux/macOS use `\` instead of the backtick for line continuation):
 
 ```
 docker run --rm vuln-prio-ci
@@ -94,32 +94,32 @@ docker run --rm -v "${PWD}:/work" -w /work -e CACHE_DIR=/work/cache `
     vuln-prio-ci python -m vuln_prio_ci run --gitlab-csv examples/cve-inventory.csv --cve-only --output prioritization.json
 ```
 
-Im letzten Beispiel ist das Repository unter `/work` eingebunden und Arbeitsverzeichnis; Pfade sind
-relativ dazu, `prioritization.json` landet im Repository. `docker run` gibt den Exit-Code des Laufs
-zurück (PowerShell: `$LASTEXITCODE`), siehe [Ergebnis und Exit-Code](#3-ergebnis-und-exit-code).
+In the last example the repository is mounted at `/work` and is the working directory; paths are
+relative to it, and `prioritization.json` ends up in the repository. `docker run` returns the exit
+code of the run (PowerShell: `$LASTEXITCODE`), see [Result and exit code](#3-result-and-exit-code).
 
-### Konfiguration
+### Configuration
 
-Die Konfiguration kommt aus Umgebungsvariablen, in der Pipeline aus CI/CD-Variablen, lokal zusätzlich
-aus einer `.env`-Datei. Vorlage ist `.env.example`.
+Configuration comes from environment variables, in the pipeline from CI/CD variables, locally
+additionally from a `.env` file. The template is `.env.example`.
 
-| Variable | Standard | Bedeutung |
+| Variable | Default | Meaning |
 |---|---|---|
-| `CACHE_DIR` | `./cache` | Ablage für `reference.sqlite`, KEV-Dump, Mapping und Manifest |
-| `NVD_API_KEY` | leer | NVD-Schlüssel; beschleunigt den Bezug (50 statt 5 Abrufe je 30 s) |
-| `EPSS_THRESHOLD` | `0.088` | EPSS-Schwelle für den Nachweisgrad |
-| `CVSS_BAND_HIGH` | `7.0` | Untergrenze des CVSS-Bereichs C2 |
-| `CVSS_BAND_CRITICAL` | `9.0` | Untergrenze des CVSS-Bereichs C3 |
-| `EPSS_KEEP_SNAPSHOTS`, `EXPLOIT_KEEP_SNAPSHOTS` | `30` | aufbewahrte Snapshots je Quelle; `0` = alle |
-| `METASPLOIT_MODULE_TYPES` | `exploit` | Modultypen, die als Metasploit-Nachweis zählen |
+| `CACHE_DIR` | `./cache` | Location for `reference.sqlite`, KEV dump, mapping and manifest |
+| `NVD_API_KEY` | empty | NVD key; speeds up retrieval (50 instead of 5 requests per 30 s) |
+| `EPSS_THRESHOLD` | `0.088` | EPSS threshold for the evidence level |
+| `CVSS_BAND_HIGH` | `7.0` | Lower bound of CVSS band C2 |
+| `CVSS_BAND_CRITICAL` | `9.0` | Lower bound of CVSS band C3 |
+| `EPSS_KEEP_SNAPSHOTS`, `EXPLOIT_KEEP_SNAPSHOTS` | `30` | snapshots kept per source; `0` = all |
+| `METASPLOIT_MODULE_TYPES` | `exploit` | Module types that count as Metasploit evidence |
 
-Die URLs der Quellen stehen ebenfalls in `.env.example`.
+The source URLs are also listed in `.env.example`.
 
-## Nutzung
+## Usage
 
-### 1. Referenzdaten beziehen
+### 1. Fetch reference data
 
-Einzelne Quellen lokal (Ablage in `CACHE_DIR`):
+Individual sources locally (stored in `CACHE_DIR`):
 
 ```
 python -m vuln_prio_ci.sources epss [--date YYYY-MM-DD]
@@ -133,54 +133,54 @@ python -m vuln_prio_ci.sources unpin epss YYYY-MM-DD
 python -m vuln_prio_ci.sources unpin exploitdb|metasploit SHA
 ```
 
-`all` bezieht alle Quellen mit jeweils jüngstem Stand; `manifest` schreibt `bundle-manifest.json`.
-Ein ausdrücklich angefordertes Datum (`--date`, `--ref`, `--as-of`) wird angeheftet und von der
-Aufbewahrung ausgenommen. `unpin` hebt die Anheftung wieder auf (Commit-SHA auch gekürzt) und wendet
-sofort die Aufbewahrung an: Liegt der Snapshot außerhalb der jüngsten `*_KEEP_SNAPSHOTS`, wird er
-gelöscht. NVD ohne `NVD_API_KEY`: 5 Abrufe je 30 s, ein Vollbezug dauert etwa eine
-Viertelstunde; danach läuft der Abgleich inkrementell.
+`all` fetches all sources at their latest state; `manifest` writes `bundle-manifest.json`. An
+explicitly requested date (`--date`, `--ref`, `--as-of`) is pinned and exempt from retention. `unpin`
+removes the pin again (commit SHA may be abbreviated) and applies retention immediately: if the
+snapshot lies outside the most recent `*_KEEP_SNAPSHOTS`, it is deleted. NVD without `NVD_API_KEY`:
+5 requests per 30 s, a full retrieval takes about a quarter of an hour; afterwards the sync runs
+incrementally.
 
-### 2. Befunde priorisieren
+### 2. Prioritize findings
 
 ```
 python -m vuln_prio_ci run --report-dir . --assessments security/prioritization-assessments.yaml \
     --max-age-days 2 --output prioritization.json --codequality gl-code-quality-report.json
 ```
 
-| Option | Bedeutung |
+| Option | Meaning |
 |---|---|
-| `--report FILE` | GitLab-Sicherheitsbericht (mehrfach möglich) |
-| `--report-dir DIR` | Verzeichnis mit `gl-sast-report.json`, `gl-dependency-scanning-report.json`, `gl-container-scanning-report.json` |
-| `--gitlab-csv FILE` | CSV-Export des Vulnerability Reports (Betriebsart 2) |
-| `--assessments FILE` | Einschätzungsdatei (YAML) im Repository |
-| `--output FILE` | Ergebnisdatei (JSON) |
-| `--codequality FILE` | Code-Quality-Bericht für `artifacts:reports:codequality` |
-| `--max-age-days N` | Höchstalter des Informationspakets in Tagen (Standard 2) |
-| `--cve-only` | nur Befunde mit CVE (Verfahren 1) |
-| `--default-exposure` | Erreichbarkeit, wenn keine angegeben ist (`remote`, `intern`, `lokal`; Standard `remote`) |
-| `--online` | EUVD-Einzelabruf erlauben (Standard: aus) |
-| `--cve ID` | einzelne CVE priorisieren (mehrfach möglich), Ausgabe nur im Terminal |
-| `--cvss-method` | nur mit `--cve`: Entscheidung allein nach CVSS-Basiswert statt Verfahren 1 |
+| `--report FILE` | GitLab security report (may be repeated) |
+| `--report-dir DIR` | Directory with `gl-sast-report.json`, `gl-dependency-scanning-report.json`, `gl-container-scanning-report.json` |
+| `--gitlab-csv FILE` | CSV export of the Vulnerability Report (mode 2) |
+| `--assessments FILE` | Assessment file (YAML) in the repository |
+| `--output FILE` | Result file (JSON) |
+| `--codequality FILE` | Code Quality report for `artifacts:reports:codequality` |
+| `--max-age-days N` | Maximum age of the information bundle in days (default 2) |
+| `--cve-only` | only findings with a CVE (method 1) |
+| `--default-exposure` | Reachability if none is given (`remote`, `intern`, `lokal`; default `remote`) |
+| `--online` | allow single EUVD lookups (default: off) |
+| `--cve ID` | prioritize a single CVE (may be repeated), output in the terminal only |
+| `--cvss-method` | only with `--cve`: decide solely by CVSS base score instead of method 1 |
 
-Einzelne CVEs ohne Bericht (Verfahren 1, CVSS-Basiswert aus der NVD im Referenzdatenspeicher):
+Single CVEs without a report (method 1, CVSS base score from the NVD in the reference data store):
 
 ```
 python -m vuln_prio_ci run --cve CVE-2021-44228 --cve CVE-2023-0464
 ```
 
-Das Ergebnis steht nur im Terminal: je CVE Stufe, Rang, CVSS-Basiswert und Begründung, auch für
-Planmäßig und Zurückgestellt. Es entstehen keine Dateien; `--cve` lässt sich deshalb nicht mit
-`--report`, `--report-dir`, `--gitlab-csv`, `--output` oder `--codequality` kombinieren. Die
-Referenzdaten (Schritt 1) müssen vorhanden sein, die Exit-Codes gelten wie unten.
+The result appears in the terminal only: per CVE the level, rank, CVSS base score and rationale, also
+for Planmäßig and Zurückgestellt. No files are created; `--cve` therefore cannot be combined with
+`--report`, `--report-dir`, `--gitlab-csv`, `--output` or `--codequality`. The reference data
+(step 1) must be present; the exit codes apply as below.
 
-Zum Vergleich entscheidet `--cvss-method` dieselben CVEs allein nach dem CVSS-Basiswert
-(`rules/decision_table_cvss.csv`, qualitative Schwere nach CVSS v3/v4):
+For comparison, `--cvss-method` decides the same CVEs solely by the CVSS base score
+(`rules/decision_table_cvss.csv`, qualitative severity per CVSS v3/v4):
 
 ```
 python -m vuln_prio_ci run --cve CVE-2021-44228 --cve CVE-2023-0464 --cvss-method
 ```
 
-| CVSS-Schwere | Basiswert | Stufe | Rang |
+| CVSS severity | Base score | Level | Rank |
 |---|---|---|---|
 | critical | 9.0–10.0 | Sofort | 5 |
 | high | 7.0–8.9 | Außerplanmäßig | 4 |
@@ -188,169 +188,168 @@ python -m vuln_prio_ci run --cve CVE-2021-44228 --cve CVE-2023-0464 --cvss-metho
 | low | 0.1–3.9 | Zurückgestellt | 2 |
 | none | 0.0 | Zurückgestellt | 1 |
 
-Das CVSS-Verfahren gibt es nur im Terminal mit `--cve`; Berichte und CSV-Export werden immer nach
-Verfahren 1/2 entschieden. Eine CVE ohne CVSS-Basiswert wird nicht priorisiert, sondern als „nicht
-priorisiert“ aufgeführt (Exit-Code 3, sofern keine andere CVE höher einstuft); die GitLab-Schwere zählt
-nicht als Basiswert.
+The CVSS method exists only in the terminal with `--cve`; reports and the CSV export are always
+decided by method 1/2. A CVE without a CVSS base score is not prioritized but listed as "nicht
+priorisiert" (not prioritized; exit code 3, unless another CVE is rated higher); the GitLab severity
+does not count as a base score.
 
-Zwei Betriebsarten:
+Two modes:
 
-- **Betriebsart 1**: Befunde des Pipeline-Laufs aus den Berichtsartefakten (`--report-dir`).
-- **Betriebsart 2**: Bestand des Hauptzweigs aus dem CSV-Export (`--gitlab-csv … --cve-only`).
+- **Mode 1**: findings of the pipeline run from the report artifacts (`--report-dir`).
+- **Mode 2**: inventory of the main branch from the CSV export (`--gitlab-csv … --cve-only`).
 
-Den Export holt `python -m vuln_prio_ci export-inventory --project $CI_PROJECT_ID --output inventory.csv`
-(Vulnerability Export API, nur Ultimate; braucht `GITLAB_API_TOKEN` mit Scope `read_api`).
+The export is fetched by `python -m vuln_prio_ci export-inventory --project $CI_PROJECT_ID --output inventory.csv`
+(Vulnerability Export API, Ultimate only; needs `GITLAB_API_TOKEN` with scope `read_api`).
 
-**Testdaten:** `examples/cve-list.txt` enthält 344 CVE-Kennungen (270 verschiedene; Mehrfachnennungen
-wie in einem Bestand, in dem eine CVE mehrere Pakete betrifft). `examples/cve-inventory.csv` ist
-dieselbe Liste im Format des CSV-Exports, eine Zeile je Eintrag, ohne Paket und CVSS-Vektor. Nach
-dem Bezug der Referenzdaten (Schritt 1):
+**Test data:** `examples/cve-list.txt` contains 344 CVE identifiers (270 distinct; repeated entries
+as in an inventory where one CVE affects several packages). `examples/cve-inventory.csv` is the same
+list in the format of the CSV export, one row per entry, without package and CVSS vector. After
+fetching the reference data (step 1):
 
 ```
 python -m vuln_prio_ci run --gitlab-csv examples/cve-inventory.csv --cve-only --output prioritization.json
 ```
 
-### 3. Ergebnis und Exit-Code
+### 3. Result and exit code
 
-| Exit-Code | Bedeutung | in der Pipeline |
+| Exit code | Meaning | in the pipeline |
 |---|---|---|
-| 0 | kein Befund Sofort/Außerplanmäßig, alle entschieden, Paket aktuell | grün |
-| 3 | Ergebnis eingeschränkt: Einschätzung fehlt oder Paket älter als `--max-age-days` | Warnung |
-| 4 | mindestens ein Befund Außerplanmäßig | Warnung |
-| 5 | mindestens ein Befund Sofort | Warnung |
-| 1 | technischer Fehler: Bericht fehlt/ungültig, Informationspaket fehlt (bei CVE-Befunden), Einschätzungsdatei ungültig, certifi veraltet | Fehler |
+| 0 | no finding Sofort/Außerplanmäßig, all decided, bundle current | green |
+| 3 | result limited: assessment missing or bundle older than `--max-age-days` | warning |
+| 4 | at least one finding Außerplanmäßig | warning |
+| 5 | at least one finding Sofort | warning |
+| 1 | technical error: report missing/invalid, information bundle missing (for CVE findings), assessment file invalid, certifi outdated | failure |
 
-Die Codes 3–5 stehen in `allow_failure:exit_codes`. Bei mehreren Bedingungen gilt der höchste Code.
-Das Protokoll listet die Befunde der Stufen Sofort und Außerplanmäßig mit Begründung und gibt für
-Befunde ohne Einschätzung eine ausfüllbare Vorlage aus. Der Code-Quality-Bericht zeigt die Befunde im
-Merge Request (Sofort → blocker, Außerplanmäßig → critical, Planmäßig → major, Zurückgestellt →
-minor, ohne Einschätzung → info).
+Codes 3–5 are listed in `allow_failure:exit_codes`. With several conditions the highest code applies.
+The log lists the findings of the levels Sofort and Außerplanmäßig with rationale and prints a
+fill-in template for findings without an assessment. The Code Quality report shows the findings in the
+merge request (Sofort → blocker, Außerplanmäßig → critical, Planmäßig → major, Zurückgestellt →
+minor, without assessment → info).
 
-### Einschätzungsdatei
+### Assessment file
 
-Befunde ohne CVE brauchen eine Einschätzung des Entwicklungsteams (Ausnutzungslage, technische
-Auswirkung, optional Erreichbarkeit), ebenso VEX-Aussagen. Die Datei liegt im Repository des Produkts,
-üblich unter `security/prioritization-assessments.yaml`; ein Beispiel steht in
+Findings without a CVE need an assessment by the development team (exploitation status, technical
+impact, optionally reachability), as do VEX statements. The file lives in the product's repository,
+usually at `security/prioritization-assessments.yaml`; an example is in
 `examples/prioritization-assessments.yaml`.
 
-Kennung eines Befunds in dieser Datei: ohne CVE `Regel-ID:Datei`, mit CVE `CVE:Paket`.
+Identifier of a finding in this file: without CVE `rule-ID:file`, with CVE `CVE:package`.
 
-## Sicherheitshinweis: eMudhra/emSign-Vorfall (Oktober 2026)
+## Security notice: eMudhra/emSign incident (October 2026)
 
-Die Zwischenzertifikate von eMudhra unter der emSign-Wurzel hatten unsichere private Schlüssel. Wer
-der Wurzel weiter vertraut, ist für Man-in-the-Middle-Angriffe auf TLS offen
-([Hinweise der Python-Community](https://discuss.python.org/t/information-for-python-users-regarding-emudhra-emsign-ca-certificate-security-incident/109576)).
-Bereinigt sind **certifi ≥ 2026.10.19** und **pip ≥ 26.2.2**. pip lädt immer sein mitgeliefertes
-certifi; `--cert`, `PIP_CERT` oder `REQUESTS_CA_BUNDLE` fügen nur Zertifikate hinzu und beheben das
-nicht. Nur ein Update von pip hilft.
+The intermediate certificates of eMudhra under the emSign root had insecure private keys. Anyone who
+still trusts the root is open to man-in-the-middle attacks on TLS
+([notes from the Python community](https://discuss.python.org/t/information-for-python-users-regarding-emudhra-emsign-ca-certificate-security-incident/109576)).
+**certifi ≥ 2026.10.19** and **pip ≥ 26.2.2** are patched. pip always loads its bundled certifi;
+`--cert`, `PIP_CERT` or `REQUESTS_CA_BUNDLE` only add certificates and do not fix this. Only
+updating pip helps.
 
-Umsetzung in diesem Projekt:
-- **pip zuerst, über den Hash gesichert:** Image, Test-Job und die Anleitung oben heben pip vor jeder
-  anderen Installation auf 26.2.2, mit Direkt-URL und `#sha256=…`. Der Hash schützt den Abruf auch
-  dann, wenn das noch alte pip dabei einem falschen Zertifikat vertraut.
-- **Abhängigkeiten mit Hashes:** `pip install --require-hashes -r requirements.lock`. Ein
-  untergeschobenes Paket bricht die Installation ab.
-- **certifi-Prüfung zur Laufzeit:** `fetch-bundle`, `publish-bundle`, `export-inventory`,
-  `run --online` und alle Bezüge unter `python -m vuln_prio_ci.sources` brechen mit Exit-Code 1 ab,
-  wenn certifi älter als 2026.10.19 ist (`src/vuln_prio_ci/tls.py`). Der Bau des Images bricht
-  ebenfalls ab.
-- **Image ohne Layer-Cache bauen:** `docker build --pull --no-cache`, `ca-certificates` wird im
-  Image aktualisiert. Eine wöchentliche zeitgesteuerte Pipeline (`PRIO_JOB=rebuild-image`) hält
-  Basis-Image und Systemzertifikate aktuell.
-- **Kein Dependency-Cooldown für certifi und pip:** Mit Cooldowns bleibt man bis zum Update
-  verwundbar. Bei einem neuen Sicherheits-Release sofort `scripts/lock.py` laufen lassen und
-  `PIP_WHEEL` (Dockerfile, `.gitlab-ci.yml`) anpassen.
+Implementation in this project:
+- **pip first, secured by hash:** The image, the test job and the instructions above upgrade pip to
+  26.2.2 before any other installation, with a direct URL and `#sha256=…`. The hash protects the
+  download even if the still-old pip trusts a wrong certificate while doing so.
+- **Dependencies with hashes:** `pip install --require-hashes -r requirements.lock`. A substituted
+  package aborts the installation.
+- **certifi check at runtime:** `fetch-bundle`, `publish-bundle`, `export-inventory`,
+  `run --online` and all retrievals under `python -m vuln_prio_ci.sources` abort with exit code 1 if
+  certifi is older than 2026.10.19 (`src/vuln_prio_ci/tls.py`). The image build aborts as well.
+- **Build the image without layer cache:** `docker build --pull --no-cache`, `ca-certificates` is
+  updated in the image. A weekly scheduled pipeline (`PRIO_JOB=rebuild-image`) keeps the base image
+  and system certificates current.
+- **No dependency cooldown for certifi and pip:** With cooldowns you stay vulnerable until the update.
+  On a new security release run `scripts/lock.py` immediately and adjust `PIP_WHEEL` (Dockerfile,
+  `.gitlab-ci.yml`).
 
-Python 3.15.1 liefert pip 26.2.2 über `ensurepip` mit; unter 3.15.0 bekommt ein neues venv noch
-pip 26.2.1. Der erste Installationsschritt ist deshalb für jedes neue venv Pflicht.
+Python 3.15.1 ships pip 26.2.2 via `ensurepip`; under 3.15.0 a new venv still gets pip 26.2.1. The
+first installation step is therefore mandatory for every new venv.
 
-## Aufbau
+## Layout
 
 ```
 vuln-prio-ci/
 ├── src/vuln_prio_ci/
 │   ├── __main__.py            CLI: python -m vuln_prio_ci run|fetch-bundle|publish-bundle|export-inventory
-│   ├── tls.py                 Mindeststand certifi (eMudhra/emSign)
-│   ├── config.py              Konfiguration (Umgebungsvariablen, lokal .env)
-│   ├── pipeline.py            Orchestrierung: Kennung, VEX, Anreicherung, Entscheidung
-│   ├── ci/                    run.py (Lauf, Exit-Codes), freshness.py (Alter des Informationspakets),
-│   │                          codequality.py (Bericht für den Merge Request), gitlab_api.py
+│   ├── tls.py                 Minimum certifi version (eMudhra/emSign)
+│   ├── config.py              Configuration (environment variables, locally .env)
+│   ├── pipeline.py            Orchestration: identifier, VEX, enrichment, decision
+│   ├── ci/                    run.py (run, exit codes), freshness.py (age of the information bundle),
+│   │                          codequality.py (report for the merge request), gitlab_api.py
 │   │                          (Generic Package Registry, Vulnerability Export API)
-│   ├── ingest/                GitLab-Sicherheitsberichte, CSV-Export, Einschätzungsdatei
-│   ├── normalize/             Kennungshierarchie CVE/EUVD/GHSA/CWE, Fingerabdruck
-│   ├── enrich/                CVSS, EPSS, KEV, Exploit-DB/Metasploit, NVD, EUVD (nur Nachschlagen)
-│   ├── decide/                Nachweisgrad, Schutzbedarf, Regeltabellen, Entscheidung
-│   ├── rules/                 decision_table_cve.csv (18 Zeilen), decision_table_cveless.csv (54 Zeilen),
-│   │                          decision_table_cvss.csv (5 Zeilen, nur --cve --cvss-method)
-│   ├── sources/               Bezug der Referenzdaten: python -m vuln_prio_ci.sources <quelle>|all|manifest
-│   ├── store/                 Referenzdatenspeicher (SQLite, CACHE_DIR/reference.sqlite)
-│   └── models/                Pydantic-Schemata und Enums
-├── doc/                       Dokumentation der Datenerhebung je Skript in src/vuln_prio_ci/sources
-├── templates/prioritize.gitlab-ci.yml   Vorlage zum Einbinden in Produkt-Pipelines
+│   ├── ingest/                GitLab security reports, CSV export, assessment file
+│   ├── normalize/             Identifier hierarchy CVE/EUVD/GHSA/CWE, fingerprint
+│   ├── enrich/                CVSS, EPSS, KEV, Exploit-DB/Metasploit, NVD, EUVD (lookup only)
+│   ├── decide/                Evidence level, protection need, rule tables, decision
+│   ├── rules/                 decision_table_cve.csv (18 rows), decision_table_cveless.csv (54 rows),
+│   │                          decision_table_cvss.csv (5 rows, only --cve --cvss-method)
+│   ├── sources/               Fetching reference data: python -m vuln_prio_ci.sources <source>|all|manifest
+│   ├── store/                 Reference data store (SQLite, CACHE_DIR/reference.sqlite)
+│   └── models/                Pydantic schemas and enums
+├── doc/                       Documentation of the data collection per script in src/vuln_prio_ci/sources
+├── templates/prioritize.gitlab-ci.yml   Template for inclusion in product pipelines
 ├── examples/                  product.gitlab-ci.yml, prioritization-assessments.yaml,
-│                              cve-list.txt + cve-inventory.csv (Testdaten)
-├── .gitlab-ci.yml             eigene Pipeline: Tests, Image, tägliches Informationspaket
-├── Dockerfile                 Image für die Jobs (kein Dienst, kein Port)
-├── requirements*.txt          Untergrenzen; requirements*.lock: feste Versionen mit Hashes
-├── scripts/lock.py            erzeugt die Lock-Dateien
+│                              cve-list.txt + cve-inventory.csv (test data)
+├── .gitlab-ci.yml             own pipeline: tests, image, daily information bundle
+├── Dockerfile                 Image for the jobs (no service, no port)
+├── requirements*.txt          Lower bounds; requirements*.lock: pinned versions with hashes
+├── scripts/lock.py            generates the lock files
 └── tests/
 ```
 
-## Informationspaket
+## Information bundle
 
-Der Priorisierungslauf ruft keine externen Dienste auf. Die Informationen kommen aus einem täglich
-erzeugten Informationspaket. Die zeitgesteuerte Pipeline dieses Projekts (`PRIO_JOB=reference-bundle`)
-bezieht alle Quellen und veröffentlicht das Paket in der Generic Package Registry dieses Projekts
-(`reference-bundle/<Zeitstempel>/reference-bundle.tar.gz`):
+The prioritization run calls no external services. The information comes from a daily generated
+information bundle. This project's scheduled pipeline (`PRIO_JOB=reference-bundle`) fetches all
+sources and publishes the bundle in this project's Generic Package Registry
+(`reference-bundle/<timestamp>/reference-bundle.tar.gz`):
 
 ```
 python -m vuln_prio_ci.sources all
 python -m vuln_prio_ci publish-bundle --project "$CI_PROJECT_ID"
 ```
 
-Der Produkt-Job lädt die jüngste Version mit dem Job-Token:
+The product job downloads the latest version with the job token:
 
 ```
-python -m vuln_prio_ci fetch-bundle --project <ID oder Pfad von vuln-prio-ci>
+python -m vuln_prio_ci fetch-bundle --project <ID or path of vuln-prio-ci>
 ```
 
-Dafür muss vuln-prio-ci die Produktprojekte in der Job-Token-Zulassung führen
+For this, vuln-prio-ci must list the product projects in its job token allowlist
 (Settings > CI/CD > Job token permissions).
 
-Wie die Daten je Quelle erhoben werden, steht in [doc/](doc/README.md).
+How the data is collected per source is described in [doc/](doc/README.md).
 
-## Einbindung in die Produkt-Pipeline
+## Integration into the product pipeline
 
-- `templates/prioritize.gitlab-ci.yml` per `include: project/file` einbinden, zwei Jobs:
-  - `vuln-prioritize` (Betriebsart 1): Befunde des Laufs aus den Berichtsartefakten von SAST,
-    Dependency Scanning und Container Scanning, Einschätzungsdatei aus dem Repository.
-  - `vuln-prioritize-inventory` (Betriebsart 2): zeitgesteuert (`PRIO_INVENTORY=true`), exportiert
-    den Bestand des Hauptzweigs über die Vulnerability Export API (`GITLAB_API_TOKEN`, Scope
-    `read_api`) und priorisiert die Befunde mit CVE neu (`--cve-only`).
-- `examples/product.gitlab-ci.yml` zeigt ein Produkt. **Wichtig:** Die GitLab-Vorlagen für SAST und
-  Dependency Scanning legen ihre Berichte nur unter `artifacts:reports` ab; Folgejobs erhalten sie
-  dann nicht (https://gitlab.com/gitlab-org/gitlab/-/issues/243717). Die Scanner-Jobs sind um
-  `artifacts:paths` zu ergänzen.
-- `examples/prioritization-assessments.yaml`: Einschätzungsdatei (Verfahren 2 und VEX-Aussagen),
-  im Produkt unter `security/prioritization-assessments.yaml`.
+- Include `templates/prioritize.gitlab-ci.yml` via `include: project/file`, two jobs:
+  - `vuln-prioritize` (mode 1): findings of the run from the report artifacts of SAST, Dependency
+    Scanning and Container Scanning, assessment file from the repository.
+  - `vuln-prioritize-inventory` (mode 2): scheduled (`PRIO_INVENTORY=true`), exports the main
+    branch inventory via the Vulnerability Export API (`GITLAB_API_TOKEN`, scope `read_api`) and
+    re-prioritizes the findings with a CVE (`--cve-only`).
+- `examples/product.gitlab-ci.yml` shows a product. **Important:** The GitLab templates for SAST and
+  Dependency Scanning store their reports only under `artifacts:reports`; downstream jobs then do not
+  receive them (https://gitlab.com/gitlab-org/gitlab/-/issues/243717). The scanner jobs must be
+  extended with `artifacts:paths`.
+- `examples/prioritization-assessments.yaml`: assessment file (method 2 and VEX statements),
+  located in the product at `security/prioritization-assessments.yaml`.
 
-## Abhängigkeiten festschreiben
+## Pinning dependencies
 
-`requirements.txt`/`requirements-dev.txt` enthalten Untergrenzen, die Lock-Dateien feste Versionen
-mit SHA-256 für Linux x86_64 und CPython 3.15. Nach jeder Änderung der Untergrenzen und bei
-Sicherheits-Releases neu erzeugen (braucht pip ≥ 26.2.2):
+`requirements.txt`/`requirements-dev.txt` contain lower bounds, the lock files pinned versions with
+SHA-256 for Linux x86_64 and CPython 3.15. Regenerate after every change to the lower bounds and on
+security releases (needs pip ≥ 26.2.2):
 
 ```
 python scripts/lock.py
 ```
 
-Die Abhängigkeiten sind `pydantic`, `pydantic-settings`, `httpx`, `ruamel.yaml` (reines Python,
-sicherer Lader; doppelte Schlüssel in der Einschätzungsdatei sind ein Fehler) und `certifi`.
+The dependencies are `pydantic`, `pydantic-settings`, `httpx`, `ruamel.yaml` (pure Python, safe
+loader; duplicate keys in the assessment file are an error) and `certifi`.
 
-## Geprüft
+## Verified
 
-- 194 Tests unter Python 3.15 (Windows), auch mit Deprecation-Warnungen als Fehler.
-- Lock-Dateien gegen PyPI aufgelöst (alle Pakete als Wheel für cp315/manylinux verfügbar).
+- 194 tests under Python 3.15 (Windows), also with deprecation warnings as errors.
+- Lock files resolved against PyPI (all packages available as wheels for cp315/manylinux).
 
-Nicht geprüft: Image-Build, Lauf in einer echten GitLab-Instanz, echter Bericht des eingesetzten
-Dependency-Scanning-Analysators, NVD gegen die echte API.
+Not verified: image build, run in a real GitLab instance, real report from the deployed Dependency
+Scanning analyzer, NVD against the real API.

@@ -1,38 +1,38 @@
 # `common.py`
 
-Dieses Skript erhebt selbst keine Daten. Es stellt die Funktionen bereit, die alle Bezugsskripte nutzen.
+This script does not collect any data itself. It provides the functions that all retrieval scripts use.
 
-## HTTP-Abruf
+## HTTP download
 
-- **`download(url)`** lädt eine Datei per `httpx.get` (Weiterleitungen werden verfolgt, Zeitlimit
-  60 s) und liefert Inhalt und die URL nach der Weiterleitung. Letztere wird als Herkunft im Snapshot
-  gespeichert.
-- **`get_json(url)`** nutzt `download` und liest die Antwort als JSON.
+- **`download(url)`** loads a file via `httpx.get` (redirects are followed, timeout 60 s) and returns
+  the content and the URL after redirection. The latter is stored as the origin in the snapshot.
+- **`get_json(url)`** uses `download` and reads the response as JSON.
 
-Fehlerbehandlung: Jeder Fehler wird als `SourceError` gemeldet.
+Error handling: every error is reported as `SourceError`.
 
-| Fall | Meldung |
+| Case | Message |
 | --- | --- |
-| Netzwerkfehler | „Abruf fehlgeschlagen" |
-| HTTP 403 oder 404 | „nicht gefunden" (EPSS beantwortet ein Datum ohne Datei mit 403) |
-| anderer HTTP-Fehlerstatus | „Abruf fehlgeschlagen (HTTP …)" |
-| keine gültige JSON-Antwort | „keine gültige JSON-Antwort" |
+| network error | "Abruf fehlgeschlagen" (retrieval failed) |
+| HTTP 403 or 404 | "nicht gefunden" (not found; EPSS answers a date without a file with 403) |
+| other HTTP error status | "Abruf fehlgeschlagen (HTTP …)" |
+| no valid JSON response | "keine gültige JSON-Antwort" (no valid JSON response) |
 
-## CVE-Bereinigung
+## CVE cleanup
 
-**`normalize_cve(value)`** bereinigt eine CVE-Angabe aus Freitextfeldern (Exploit-DB, Metasploit):
+**`normalize_cve(value)`** cleans up a CVE entry from free-text fields (Exploit-DB, Metasploit):
 
-1. Alle Leerzeichen entfernen (`CVE-2015- 5698` wird `CVE-2015-5698`).
-2. In Großbuchstaben umwandeln.
-3. Satzzeichen am Ende entfernen (`.`, `,`, `;`, `:`).
-4. Gegen das Muster `CVE-JJJJ-NNNN…` (mindestens vier Ziffern am Ende) prüfen.
+1. Remove all whitespace (`CVE-2015- 5698` becomes `CVE-2015-5698`).
+2. Convert to upper case.
+3. Strip trailing punctuation (`.`, `,`, `;`, `:`).
+4. Check against the pattern `CVE-YYYY-NNNN…` (at least four digits at the end).
 
-Passt das Ergebnis nicht, liefert die Funktion `None`, etwa bei Platzhaltern wie `CVE-n/a`.
+If the result does not match, the function returns `None`, for example for placeholders such as
+`CVE-n/a`.
 
-## Zeitstempel
+## Timestamps
 
-- **`utc_timestamp(value)`** wandelt einen ISO-8601-Zeitstempel beliebiger Zone nach UTC um, auf die
-  Sekunde genau. Ein nachgestelltes `Z` wird akzeptiert, ein Zeitstempel ohne Zone gilt als UTC. Das
-  Ergebnis lässt sich als Text sortieren.
-- **`now_utc()`** liefert die aktuelle Zeit im gleichen Format. Sie dient als `fetched_at` (Zeitpunkt
-  des Bezugs).
+- **`utc_timestamp(value)`** converts an ISO 8601 timestamp of any zone to UTC, accurate to the
+  second. A trailing `Z` is accepted, a timestamp without a zone is treated as UTC. The result can be
+  sorted as text.
+- **`now_utc()`** returns the current time in the same format. It serves as `fetched_at` (time of
+  retrieval).

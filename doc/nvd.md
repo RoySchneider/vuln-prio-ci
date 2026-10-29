@@ -1,56 +1,54 @@
-# `nvd.py` – CVSS-Basiswerte aus der NVD
+# `nvd.py` – CVSS base scores from the NVD
 
-## Quelle
+## Source
 
-Die CVE API 2.0 der NVD (`nvd_api_url`, Standard `https://services.nvd.nist.gov/rest/json/cves/2.0`).
-Der Abruf erfolgt per `GET`; ist ein API-Schlüssel gesetzt (`nvd_api_key`), wird er im Header `apiKey`
-mitgesendet. Zeitlimit je Abruf: 120 s.
+The NVD CVE API 2.0 (`nvd_api_url`, default `https://services.nvd.nist.gov/rest/json/cves/2.0`).
+Retrieval is via `GET`; if an API key is set (`nvd_api_key`), it is sent in the header `apiKey`.
+Timeout per request: 120 s.
 
-## Auswahl der Bewertung je CVE (`select_metric`)
+## Selecting the rating per CVE (`select_metric`)
 
-Je CVE wird genau **eine** Bewertung gespeichert, nach der Festlegung in Kapitel 5:
+Exactly **one** rating is stored per CVE, according to the decision in chapter 5:
 
-1. Version 3.x vor 4.0.
-2. Innerhalb einer Version die Primärbewertung (`Primary`) vor der Zweitbewertung (`Secondary`).
-3. Bei 3.x die Version 3.1 vor 3.0.
+1. Version 3.x before 4.0.
+2. Within a version the primary rating (`Primary`) before the secondary rating (`Secondary`).
+3. For 3.x, version 3.1 before 3.0.
 
-Bewertungen nach CVSS 2.0 werden nicht übernommen, weil die CVSS-Bereiche des Verfahrens 1 für 3.x und
-4.0 definiert sind. Eine CVE nur mit 2.0-Bewertung gilt als ohne CVSS-Basiswert. Einträge ohne
-`baseScore` werden ignoriert.
+Ratings according to CVSS 2.0 are not taken over because the CVSS bands of method 1 are defined for
+3.x and 4.0. A CVE with only a 2.0 rating is treated as having no CVSS base score. Entries without
+`baseScore` are ignored.
 
-Gespeichert werden Basiswert, Vektor, Version, Bewertungsart, bewertende Stelle, Änderungszeitpunkt des
-CVE-Datensatzes laut NVD und der Bezugszeitpunkt.
+Stored are base score, vector, version, rating type, rating source, modification time of the CVE
+record according to the NVD, and the time of retrieval.
 
-## Ablauf von `sync(full=False)`
+## Flow of `sync(full=False)`
 
-1. **Umfang bestimmen.**
-   - **Vollbezug**, wenn `full` gesetzt ist oder noch nie abgeglichen wurde: der gesamte Bestand, ohne
-     Zeitfenster.
-   - **Inkrementell** sonst: ab dem letzten Abgleich (`synced_until`) minus **1 Stunde Überlappung**,
-     damit kein Datensatz an der Fenstergrenze fehlt. Die Anfragen laufen über `lastModStartDate` und
-     `lastModEndDate`, in Fenstern von **höchstens 120 Tagen** (Grenze der API).
-2. **Seitenweise abrufen.** Pro Abruf höchstens 2000 Einträge (`resultsPerPage`), fortgesetzt über
-   `startIndex`, bis `totalResults` erreicht ist.
-3. **Pausen einhalten.** Ohne API-Schlüssel erlaubt die NVD 5 Abrufe je 30 s, mit Schlüssel 50. Der
-   Bezug wartet deshalb 6,1 s bzw. 0,7 s zwischen den Abrufen. Ein Vollbezug dauert ohne Schlüssel
-   rund eine Viertelstunde; für den Zeitplan sollte `NVD_API_KEY` gesetzt werden.
-4. **Je Seite auswerten.** Für jeden Eintrag wird die Bewertung ausgewählt.
-   - Gibt es eine verwendbare Bewertung, wird sie eingefügt bzw. aktualisiert.
-   - Gibt es keine (mehr), wird ein vorhandener Eintrag der CVE **gelöscht** (`removed`).
-   - Einträge ohne CVE-Kennung werden übersprungen.
-   Schreiben und Löschen einer Seite laufen in einer Transaktion.
-5. **Stand festhalten.** Am Ende werden `synced_until` (aktuelle Zeit, UTC), der Bezugszeitpunkt und
-   die Angabe, ob es ein Vollbezug war, gespeichert (Tabelle `nvd_sync`). Der Merker „Vollbezug"
-   bleibt gesetzt, auch wenn später inkrementell abgeglichen wird.
+1. **Determine the scope.**
+   - **Full retrieval** if `full` is set or no sync has ever happened: the entire dataset, without a
+     time window.
+   - **Incremental** otherwise: from the last sync (`synced_until`) minus **1 hour of overlap**, so
+     that no record is missed at the window boundary. Requests use `lastModStartDate` and
+     `lastModEndDate`, in windows of **at most 120 days** (limit of the API).
+2. **Fetch page by page.** At most 2000 entries per request (`resultsPerPage`), continued via
+   `startIndex` until `totalResults` is reached.
+3. **Observe pauses.** Without an API key the NVD allows 5 requests per 30 s, with a key 50. The
+   retrieval therefore waits 6.1 s or 0.7 s between requests. A full retrieval takes about a quarter
+   of an hour without a key; for the schedule `NVD_API_KEY` should be set.
+4. **Process each page.** The rating is selected for each entry.
+   - If a usable rating exists, it is inserted or updated.
+   - If there is none (any more), an existing entry for the CVE is **deleted** (`removed`).
+   - Entries without a CVE identifier are skipped.
+   Writing and deleting of a page run in one transaction.
+5. **Record the state.** At the end, `synced_until` (current time, UTC), the time of retrieval and
+   whether it was a full retrieval are stored (table `nvd_sync`). The "full retrieval" flag stays set
+   even if later syncs are incremental.
 
-## Fehler
+## Errors
 
-Netzwerkfehler, HTTP-Fehlerstatus und Antworten, die kein gültiges JSON sind, führen zu `SourceError`.
-Der Stand `synced_until` wird dann nicht fortgeschrieben; bereits abgeschlossene Seiten bleiben
-gespeichert.
+Network errors, HTTP error statuses and responses that are not valid JSON lead to `SourceError`. The
+state `synced_until` is then not advanced; pages already completed remain stored.
 
-## Ergebnis
+## Result
 
-Tabelle `nvd_cvss` (eine Zeile je CVE) und `nvd_sync` (eine Zeile). Liegt für eine CVE kein Eintrag
-vor, bleibt der Basiswert aus dieser Quelle unbekannt; die Pipeline greift dann auf den Vektor aus dem
-Bericht zurück.
+Table `nvd_cvss` (one row per CVE) and `nvd_sync` (one row). If there is no entry for a CVE, the base
+score from this source remains unknown; the pipeline then falls back to the vector from the report.

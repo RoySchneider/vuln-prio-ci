@@ -1,55 +1,56 @@
-# `epss.py` – EPSS-Tagesdateien
+# `epss.py` – EPSS daily files
 
-## Quelle
+## Source
 
-Die Bulk-Dateien von FIRST EPSS:
+The bulk files of FIRST EPSS:
 
 ```
-<epss_bulk_base_url>/epss_scores-<JJJJ-MM-TT>.csv.gz   Datei eines bestimmten Tages
-<epss_bulk_base_url>/epss_scores-current.csv.gz        Weiterleitung auf die jüngste Tagesdatei
+<epss_bulk_base_url>/epss_scores-<YYYY-MM-DD>.csv.gz   file of a specific day
+<epss_bulk_base_url>/epss_scores-current.csv.gz        redirect to the most recent daily file
 ```
 
-Ein Abruf je Tag ersetzt Einzelabrufe über die FIRST-API je CVE. Für ein Datum ohne Datei antwortet
-der Server mit HTTP 403.
+One download per day replaces individual requests per CVE through the FIRST API. For a date without a
+file the server answers with HTTP 403.
 
-## Ablauf von `sync(day=None)`
+## Flow of `sync(day=None)`
 
-1. **Abruf**: Die Datei zum Tag `day` wird geladen, ohne Angabe die jüngste (`-current`).
-2. **Entpacken**: gzip entpacken und als UTF-8 lesen (mit oder ohne BOM). Schlägt das fehl, bricht der
-   Bezug mit `EpssSourceError` ab.
-3. **Prüfen und Zerlegen** (`parse`): siehe unten. Die Datei wird vollständig geprüft, bevor etwas
-   gespeichert wird.
-4. **Bezugsdatum bestimmen**: Es stammt aus der Kommentarzeile der Datei. Das Datum aus dem
-   Dateinamen der Weiterleitung muss dazu passen, sonst bricht der Bezug ab. Fehlt die Kommentarzeile
-   (ältere Dateien), gilt das Datum aus dem Dateinamen. Fehlt beides, bricht der Bezug ab.
-5. **Snapshot anlegen**: Bezugsdatum, Modellversion, Zeitstempel, Herkunfts-URL, SHA-256 der
-   bezogenen Datei, Zeilenzahl, Bezugszeitpunkt. `pinned` ist gesetzt, wenn ein Datum ausdrücklich
-   angefordert wurde.
-6. **Speichern**: Der Snapshot wird nur geschrieben, wenn für das Datum noch keiner existiert oder
-   sich die SHA-256 unterscheidet. Ist er identisch, wird höchstens die Anheftung nachgetragen.
-7. **Aufbewahrung**: Es bleiben die jüngsten `epss_keep_snapshots` (Standard 30) nicht angehefteten
-   Snapshots; ältere werden entfernt.
+1. **Download**: The file for the day `day` is loaded, without a value the most recent one
+   (`-current`).
+2. **Unpack**: Decompress gzip and read as UTF-8 (with or without BOM). If this fails, the retrieval
+   aborts with `EpssSourceError`.
+3. **Validate and parse** (`parse`): see below. The file is validated completely before anything is
+   stored.
+4. **Determine the retrieval date**: It comes from the comment line of the file. The date from the
+   file name of the redirect must match it, otherwise the retrieval aborts. If the comment line is
+   missing (older files), the date from the file name applies. If both are missing, the retrieval
+   aborts.
+5. **Create snapshot**: retrieval date, model version, timestamp, origin URL, SHA-256 of the retrieved
+   file, row count, time of retrieval. `pinned` is set if a date was requested explicitly.
+6. **Store**: The snapshot is written only if none exists for the date yet or the SHA-256 differs. If
+   it is identical, at most the pin is added.
+7. **Retention**: The most recent `epss_keep_snapshots` (default 30) unpinned snapshots are kept;
+   older ones are removed.
 
-## Dateiformat und Prüfung (`parse`)
+## File format and validation (`parse`)
 
-| Variante | Aufbau |
+| Variant | Structure |
 | --- | --- |
-| aktuell | Kommentarzeile `#model_version:v2026.06.15,score_date:2026-09-12T12:00:22Z`, dann Kopfzeile `cve,epss,percentile` |
-| älter | Kopfzeile `cve,epss,percentile` oder nur `cve,epss`, ohne Kommentarzeile (Modellversion unbekannt) |
+| current | comment line `#model_version:v2026.06.15,score_date:2026-09-12T12:00:22Z`, then header line `cve,epss,percentile` |
+| older | header line `cve,epss,percentile` or only `cve,epss`, without a comment line (model version unknown) |
 
-Geprüft wird je Zeile:
+Checked per line:
 
-- Die Kopfzeile ist eine der beiden erlaubten (ohne Beachtung von Groß-/Kleinschreibung).
-- Die Spaltenzahl entspricht der Kopfzeile. Leere Zeilen werden übersprungen.
-- Die CVE-Kennung hat das Muster `CVE-JJJJ-NNNN…` und wird in Großbuchstaben gespeichert.
-- EPSS-Wert und Perzentil sind Zahlen im Bereich 0 bis 1 (NaN fällt heraus).
-- Die Datei enthält mindestens einen Wert.
+- The header line is one of the two permitted ones (case-insensitive).
+- The column count matches the header line. Empty lines are skipped.
+- The CVE identifier has the pattern `CVE-YYYY-NNNN…` and is stored in upper case.
+- EPSS value and percentile are numbers in the range 0 to 1 (NaN is rejected).
+- The file contains at least one value.
 
-**Eine fehlerhafte Zeile verwirft den ganzen Bezug.** Ein halber Snapshot würde EPSS-Werte
-stillschweigend als unbekannt erscheinen lassen.
+**A faulty line discards the entire retrieval.** A half snapshot would silently make EPSS values
+appear as unknown.
 
-## Ergebnis
+## Result
 
-Tabellen `epss_snapshot` (ein Eintrag je Bezugsdatum) und `epss_score` (CVE, EPSS, Perzentil je
-Bezugsdatum). Alle Werte eines Priorisierungslaufs stammen aus genau einem Snapshot. Fehlt die CVE
-dort, ist der EPSS-Wert unbekannt; auf ältere Snapshots wird nicht zurückgegriffen.
+Tables `epss_snapshot` (one entry per retrieval date) and `epss_score` (CVE, EPSS, percentile per
+retrieval date). All values of a prioritization run come from exactly one snapshot. If the CVE is
+missing there, the EPSS value is unknown; older snapshots are not used as a fallback.

@@ -76,6 +76,9 @@ class RunOptions:
         Reference day for the freshness check. Defaults to the current day.
     cves : list[str]
         CVE identifiers prioritised directly, without a report (output only in the terminal).
+    cvss_method : bool
+        Decide the CVEs in `cves` by the CVSS base score alone (CVSS method) instead of method 1.
+        Only together with `cves`; reports and the CSV export are always decided by method 1/2.
     """
 
     reports: list[Path] = field(default_factory=list)
@@ -91,6 +94,7 @@ class RunOptions:
     offline: bool = True
     today: Optional[date] = None
     cves: list[str] = field(default_factory=list)
+    cvss_method: bool = False
 
 
 @dataclass
@@ -274,7 +278,10 @@ def execute(opts: RunOptions) -> RunOutcome:
             raise RunError(str(exc)) from exc
 
     skipped: list[SkippedFinding] = []
-    results = prioritize_findings(findings, default_exposure=opts.default_exposure, skipped=skipped)
+    if opts.cvss_method and not opts.cves:
+        raise RunError("CVSS-Verfahren nur zusammen mit --cve (Ausgabe nur im Terminal)")
+    results = prioritize_findings(findings, default_exposure=opts.default_exposure, skipped=skipped,
+                                  cvss_method=opts.cvss_method)
     undecided = [s for s in skipped if s.reason == "undecided"]
     vex_skipped = [s for s in skipped if s.reason == "vex"]
 
@@ -467,6 +474,9 @@ def render_cves(outcome: RunOutcome) -> str:
                      else "kein Basiswert")
         lines.append(f"    CVSS {cvss_text}")
         lines.append(f"    {r.decision_note}")
+    for s in outcome.undecided:
+        # CVSS method: a CVE without a CVSS base score is not decided
+        lines.append(f"{s.finding.title}: nicht priorisiert ({s.detail})")
     lines += _freshness_lines(outcome.freshness)
     lines.append(f"Exit-Code {outcome.exit_code}: {_EXIT_TEXT[outcome.exit_code]}")
     return "\n".join(lines)

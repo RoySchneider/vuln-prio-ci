@@ -1,0 +1,6 @@
+cvss_severity,priority,priority_rank
+critical,immediate,5
+high,urgent,4
+medium,planned,3
+low,deferred,2
+none,deferred,1

@@ -74,6 +74,30 @@ docker build --pull --no-cache -t vuln-prio-ci .
 Das Image (`python:3.15-slim`) installiert die Abhängigkeiten aus `requirements.lock` mit
 `--require-hashes`. Der Bau bricht ab, wenn certifi oder pip nicht dem bereinigten Stand entsprechen.
 
+Das Image enthält ein Kommandozeilenprogramm, keinen Dienst: Jedes `docker run` führt einen Befehl
+aus und beendet sich. Ohne Befehl gibt es die Hilfe aus. Der Referenzdatenspeicher sowie Berichte und
+Ergebnisdateien liegen auf dem Host und werden eingebunden; `CACHE_DIR` zeigt auf das eingebundene
+Verzeichnis, sonst geht der Speicher mit dem Container verloren. Eine lokale `.env` liest der Container
+nur über `--env-file .env`; ein `-e` hat Vorrang vor Werten aus der Datei. Beispiele für PowerShell
+aus dem Wurzelverzeichnis des Repositorys (unter Linux/macOS `\` statt Backtick zur Fortsetzung):
+
+```
+docker run --rm vuln-prio-ci
+
+docker run --rm -v "${PWD}\cache:/data/cache" -e CACHE_DIR=/data/cache --env-file .env `
+    vuln-prio-ci python -m vuln_prio_ci.sources all
+
+docker run --rm -v "${PWD}\cache:/data/cache" -e CACHE_DIR=/data/cache `
+    vuln-prio-ci python -m vuln_prio_ci run --cve CVE-2021-44228
+
+docker run --rm -v "${PWD}:/work" -w /work -e CACHE_DIR=/work/cache `
+    vuln-prio-ci python -m vuln_prio_ci run --gitlab-csv examples/cve-inventory.csv --cve-only --output prioritization.json
+```
+
+Im letzten Beispiel ist das Repository unter `/work` eingebunden und Arbeitsverzeichnis; Pfade sind
+relativ dazu, `prioritization.json` landet im Repository. `docker run` gibt den Exit-Code des Laufs
+zurück (PowerShell: `$LASTEXITCODE`), siehe [Ergebnis und Exit-Code](#3-ergebnis-und-exit-code).
+
 ### Konfiguration
 
 Die Konfiguration kommt aus Umgebungsvariablen, in der Pipeline aus CI/CD-Variablen, lokal zusätzlich
@@ -136,6 +160,7 @@ python -m vuln_prio_ci run --report-dir . --assessments security/prioritization-
 | `--default-exposure` | Erreichbarkeit, wenn keine angegeben ist (`remote`, `intern`, `lokal`; Standard `remote`) |
 | `--online` | EUVD-Einzelabruf erlauben (Standard: aus) |
 | `--cve ID` | einzelne CVE priorisieren (mehrfach möglich), Ausgabe nur im Terminal |
+| `--cvss-method` | nur mit `--cve`: Entscheidung allein nach CVSS-Basiswert statt Verfahren 1 |
 
 Einzelne CVEs ohne Bericht (Verfahren 1, CVSS-Basiswert aus der NVD im Referenzdatenspeicher):
 
@@ -147,6 +172,26 @@ Das Ergebnis steht nur im Terminal: je CVE Stufe, Rang, CVSS-Basiswert und Begr�
 Planmäßig und Zurückgestellt. Es entstehen keine Dateien; `--cve` lässt sich deshalb nicht mit
 `--report`, `--report-dir`, `--gitlab-csv`, `--output` oder `--codequality` kombinieren. Die
 Referenzdaten (Schritt 1) müssen vorhanden sein, die Exit-Codes gelten wie unten.
+
+Zum Vergleich entscheidet `--cvss-method` dieselben CVEs allein nach dem CVSS-Basiswert
+(`rules/decision_table_cvss.csv`, qualitative Schwere nach CVSS v3/v4):
+
+```
+python -m vuln_prio_ci run --cve CVE-2021-44228 --cve CVE-2023-0464 --cvss-method
+```
+
+| CVSS-Schwere | Basiswert | Stufe | Rang |
+|---|---|---|---|
+| critical | 9.0–10.0 | Sofort | 5 |
+| high | 7.0–8.9 | Außerplanmäßig | 4 |
+| medium | 4.0–6.9 | Planmäßig | 3 |
+| low | 0.1–3.9 | Zurückgestellt | 2 |
+| none | 0.0 | Zurückgestellt | 1 |
+
+Das CVSS-Verfahren gibt es nur im Terminal mit `--cve`; Berichte und CSV-Export werden immer nach
+Verfahren 1/2 entschieden. Eine CVE ohne CVSS-Basiswert wird nicht priorisiert, sondern als „nicht
+priorisiert“ aufgeführt (Exit-Code 3, sofern keine andere CVE höher einstuft); die GitLab-Schwere zählt
+nicht als Basiswert.
 
 Zwei Betriebsarten:
 
@@ -235,7 +280,8 @@ vuln-prio-ci/
 │   ├── normalize/             Kennungshierarchie CVE/EUVD/GHSA/CWE, Fingerabdruck
 │   ├── enrich/                CVSS, EPSS, KEV, Exploit-DB/Metasploit, NVD, EUVD (nur Nachschlagen)
 │   ├── decide/                Nachweisgrad, Schutzbedarf, Regeltabellen, Entscheidung
-│   ├── rules/                 decision_table_cve.csv (18 Zeilen), decision_table_cveless.csv (54 Zeilen)
+│   ├── rules/                 decision_table_cve.csv (18 Zeilen), decision_table_cveless.csv (54 Zeilen),
+│   │                          decision_table_cvss.csv (5 Zeilen, nur --cve --cvss-method)
 │   ├── sources/               Bezug der Referenzdaten: python -m vuln_prio_ci.sources <quelle>|all|manifest
 │   ├── store/                 Referenzdatenspeicher (SQLite, CACHE_DIR/reference.sqlite)
 │   └── models/                Pydantic-Schemata und Enums
@@ -303,7 +349,7 @@ sicherer Lader; doppelte Schlüssel in der Einschätzungsdatei sind ein Fehler) 
 
 ## Geprüft
 
-- 179 Tests unter Python 3.15 (Windows), auch mit Deprecation-Warnungen als Fehler.
+- 194 Tests unter Python 3.15 (Windows), auch mit Deprecation-Warnungen als Fehler.
 - Lock-Dateien gegen PyPI aufgelöst (alle Pakete als Wheel für cp315/manylinux verfügbar).
 
 Nicht geprüft: Image-Build, Lauf in einer echten GitLab-Instanz, echter Bericht des eingesetzten

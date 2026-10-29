@@ -44,10 +44,14 @@ class PrioritizationMethod(str, Enum):
         Method 1 (with CVE).
     ssvc_developer
         Method 2 (without CVE).
+    cvss_only
+        CVSS method: CVSS base score alone, only for single CVEs in the terminal
+        (``--cve ... --cvss-method``).
     """
 
     cve_signals = "cve_signals"        # method 1 (with CVE)
     ssvc_developer = "ssvc_developer"  # method 2 (without CVE)
+    cvss_only = "cvss_only"            # CVSS method (base score alone)
 
 
 class PriorityLevel(str, Enum):

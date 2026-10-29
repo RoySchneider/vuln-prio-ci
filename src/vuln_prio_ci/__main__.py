@@ -7,6 +7,8 @@
                                         Operating mode 2: inventory of the main branch (export), method 1 only
     python -m vuln_prio_ci run --cve CVE-2021-44228 [--cve ...]
                                         prioritise single CVEs, output only in the terminal
+    python -m vuln_prio_ci run --cve CVE-2021-44228 [--cve ...] --cvss-method
+                                        the same by the CVSS base score alone (rules/decision_table_cvss.csv)
     python -m vuln_prio_ci fetch-bundle --project gruppe/vuln-prio-ci
                                         load the latest signal bundle into CACHE_DIR
     python -m vuln_prio_ci publish-bundle --project $CI_PROJECT_ID
@@ -58,6 +60,7 @@ def _cmd_run(args) -> int:
         offline=not args.online,
         today=args.today,
         cves=args.cve,
+        cvss_method=args.cvss_method,
     )
     try:
         outcome = run.execute(opts)
@@ -165,6 +168,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--gitlab-csv", help="CSV-Export des Vulnerability Reports (Betriebsart 2)")
     p.add_argument("--cve", action="append", default=[],
                    help="CVE-Kennung priorisieren, Ausgabe nur im Terminal (mehrfach)")
+    p.add_argument("--cvss-method", action="store_true",
+                   help="mit --cve: nur nach CVSS-Basiswert entscheiden (rules/decision_table_cvss.csv)")
     p.add_argument("--assessments", help="Einschätzungsdatei (YAML) im Repository")
     p.add_argument("--output", help="Ergebnisdatei (JSON)")
     p.add_argument("--codequality", help="Code-Quality-Bericht (JSON) für artifacts:reports:codequality")
@@ -196,6 +201,8 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=_cmd_export)
 
     args = parser.parse_args(argv)
+    if args.command == "run" and args.cvss_method and not args.cve:
+        parser.error("--cvss-method nur zusammen mit --cve (Ausgabe nur im Terminal)")
     if args.command == "run" and args.cve:
         conflicting = [name for name, value in (("--report", args.report), ("--report-dir", args.report_dir),
                                                 ("--gitlab-csv", args.gitlab_csv), ("--output", args.output),

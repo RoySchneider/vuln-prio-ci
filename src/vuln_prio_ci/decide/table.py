@@ -125,3 +125,6 @@ CVELESS_TABLE = DecisionTable(
     "decision_table_cveless.csv",
     ("exploitation", "exposure", "technical_impact", "protection_level"),
 )
+
+# CVSS method (--cvss-method): qualitative CVSS severity of the base score alone -> level + rank (1-5).
+CVSS_TABLE = DecisionTable("decision_table_cvss.csv", ("cvss_severity",))

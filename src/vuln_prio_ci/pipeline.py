@@ -60,6 +60,7 @@ def prioritize_findings(
     default_exposure: ExposureLevel = ExposureLevel.remote,
     project_id: Optional[int] = None,
     skipped: Optional[list[SkippedFinding]] = None,
+    cvss_method: bool = False,
 ) -> list[PrioritizationResult]:
     """Prioritise the findings.
 
@@ -76,6 +77,8 @@ def prioritize_findings(
         Project ID (currently unused).
     skipped : list[SkippedFinding], optional
         List that receives the findings that were not prioritised.
+    cvss_method : bool, optional
+        Decide by the CVSS base score alone (CVSS method) instead of method 1/2.
 
     Returns
     -------
@@ -150,10 +153,11 @@ def prioritize_findings(
 
             # [6] Decision -> priority level (incl. the CVE-less branch)
             try:
-                result = decide_priority(enriched)
+                result = decide_priority(enriched, cvss_method=cvss_method)
             except ValueError as exc:
                 # no silent default (AP-4): the finding is skipped and documented, not guessed.
-                # Mainly affects method 2 without the supplied SSVC dimensions.
+                # Mainly affects method 2 without the supplied SSVC dimensions and, with the
+                # CVSS method, findings without a CVSS base score.
                 logger.warning("Befund kann nicht priorisiert werden, übersprungen: %s (%s)", norm.title, exc)
                 if skipped is not None:
                     skipped.append(SkippedFinding(raw, "undecided", str(exc)))

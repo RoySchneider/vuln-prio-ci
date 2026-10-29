@@ -18,7 +18,7 @@ from ..models import (
     PrioritizationResult,
     PriorityLevel,
 )
-from .table import CVE_TABLE, CVELESS_TABLE
+from .table import CVE_TABLE, CVELESS_TABLE, CVSS_TABLE
 
 # Missing CVSS base score (method 1): classification by evidence grade alone (implementation plan AP-5).
 _MISSING_CVSS_PRIORITY = {
@@ -49,13 +49,15 @@ def choose_method(enriched: EnrichedFinding) -> PrioritizationMethod:
     return PrioritizationMethod.ssvc_developer
 
 
-def decide_priority(enriched: EnrichedFinding) -> PrioritizationResult:
+def decide_priority(enriched: EnrichedFinding, cvss_method: bool = False) -> PrioritizationResult:
     """Decide the priority level and rank of an enriched finding.
 
     Parameters
     ----------
     enriched : EnrichedFinding
         The enriched finding with all inputs of its method.
+    cvss_method : bool, optional
+        Decide by the CVSS base score alone (CVSS method) instead of method 1/2.
 
     Returns
     -------
@@ -69,8 +71,10 @@ def decide_priority(enriched: EnrichedFinding) -> PrioritizationResult:
     RuleMissError
         If the rule table has no row for the derived key.
     """
-    method = choose_method(enriched)
-    if method is PrioritizationMethod.cve_signals:
+    method = PrioritizationMethod.cvss_only if cvss_method else choose_method(enriched)
+    if method is PrioritizationMethod.cvss_only:
+        priority, rank, note = _decide_cvss(enriched)
+    elif method is PrioritizationMethod.cve_signals:
         priority, rank, note = _decide_v1(enriched)
     else:
         priority, rank, note = _decide_v2(enriched)
@@ -178,6 +182,38 @@ def _decide_v2(enriched: EnrichedFinding) -> tuple[str, Optional[int], str]:
         f"Auswirkung={impact.value}, Schutzbedarf={protection.value}]"
     )
     return priority, rank, rule
+
+
+def _decide_cvss(enriched: EnrichedFinding) -> tuple[str, int, str]:
+    """Decide according to the CVSS method (qualitative severity of the CVSS base score alone).
+
+    Parameters
+    ----------
+    enriched : EnrichedFinding
+        Finding with a CVSS base score. The GitLab severity does not count as one.
+
+    Returns
+    -------
+    priority : str
+        Priority level code.
+    rank : int
+        Rank from the rule table.
+    note : str
+        Human-readable decision note (the applied rule and the base score).
+
+    Raises
+    ------
+    ValueError
+        If the CVSS base score is missing.
+    """
+    impact = enriched.impact
+    if impact.cvss_base_score is None or impact.cvss_severity is None:
+        raise ValueError("CVSS-Verfahren benötigt einen CVSS-Basiswert")
+    priority, rank = CVSS_TABLE.lookup((impact.cvss_severity.value,))
+    note = f"CVSS-Verfahren[Schwere={impact.cvss_severity.value}]; CVSS {impact.cvss_base_score:.1f}"
+    if impact.cvss_source:
+        note += f" ({impact.cvss_source})"
+    return priority, rank, note + "."
 
 
 def _build_note(rule: str, e: ExploitationSignals) -> str:

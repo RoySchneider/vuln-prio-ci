@@ -239,3 +239,26 @@ def test_single_cve_without_bundle(tmp_path, monkeypatch, capsys):
         assert "FEHLER" in capsys.readouterr().err
     finally:
         get_settings.cache_clear()
+
+
+def test_single_cves_by_cvss_method(workspace, capsys, monkeypatch):
+    monkeypatch.chdir(workspace)
+    before = sorted(p.name for p in workspace.parent.rglob("*"))
+    code = ci_cli.main(["run", "--cve", "CVE-2021-44228", "--cve", "CVE-2022-3517", "--cvss-method",
+                        "--today", "2026-10-14"])
+    out = capsys.readouterr().out
+    assert code == run.EXIT_IMMEDIATE
+    assert "CVE-2021-44228: Sofort, Rang 5" in out
+    assert "CVSS-Verfahren[Schwere=critical]; CVSS 10.0 (NVD Primary 3.1)." in out
+    assert "Verfahren 1" not in out
+    assert "CVE-2022-3517: nicht priorisiert (CVSS-Verfahren benötigt einen CVSS-Basiswert)" in out
+    assert sorted(p.name for p in workspace.parent.rglob("*")) == before   # keine Dateien
+
+
+def test_cvss_method_only_with_single_cves(workspace):
+    for argv in (["run", "--cvss-method"], ["run", "--report-dir", str(workspace), "--cvss-method"]):
+        with pytest.raises(SystemExit) as exc:
+            ci_cli.main(argv)
+        assert exc.value.code == 2
+    with pytest.raises(run.RunError, match="nur zusammen mit --cve"):
+        run.execute(_opts(workspace, cvss_method=True))

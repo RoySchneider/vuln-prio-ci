@@ -1,4 +1,4 @@
-from vuln_prio_ci.decide.table import CVE_TABLE, CVELESS_TABLE
+from vuln_prio_ci.decide.table import CVE_TABLE, CVELESS_TABLE, CVSS_TABLE
 
 from ._ordinal_checks import assert_monotonic_ranks
 
@@ -26,3 +26,8 @@ def test_cveless_table_is_monotonic():
         ("exploitation", "exposure", "technical_impact", "protection_level"),
         _CVELESS_ORDERS,
     )
+
+
+def test_cvss_table_is_monotonic():
+    orders = {"cvss_severity": ["none", "low", "medium", "high", "critical"]}
+    assert_monotonic_ranks(CVSS_TABLE.rows(), ("cvss_severity",), orders)

@@ -2,9 +2,10 @@ import csv
 from itertools import product
 from pathlib import Path
 
-from vuln_prio_ci.decide.table import CVE_TABLE, CVELESS_TABLE
+from vuln_prio_ci.decide.table import CVE_TABLE, CVELESS_TABLE, CVSS_TABLE
 from vuln_prio_ci.models import (
     CvssBand,
+    CvssSeverity,
     EvidenceGrade,
     ExploitationState,
     ExposureLevel,
@@ -80,3 +81,16 @@ def test_cve_table_ranks_are_a_permutation_of_1_to_18():
 def test_cveless_table_ranks_are_a_permutation_of_1_to_54():
     ranks = sorted(rank for _, rank in CVELESS_TABLE.rows().values())
     assert ranks == list(range(1, 55))
+
+
+def test_cvss_table_covers_every_severity_once():
+    rows = _raw_rows("decision_table_cvss.csv")
+    assert len(rows) == 5
+    assert set(CVSS_TABLE.rows().keys()) == {(severity.value,) for severity in CvssSeverity}
+    for _, (priority, _rank) in CVSS_TABLE.rows().items():
+        PriorityLevel(priority)
+
+
+def test_cvss_table_ranks_are_a_permutation_of_1_to_5():
+    ranks = sorted(rank for _, rank in CVSS_TABLE.rows().values())
+    assert ranks == list(range(1, 6))

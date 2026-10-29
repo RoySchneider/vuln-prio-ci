@@ -1,9 +1,10 @@
 import pytest
 
 from vuln_prio_ci.decide.priority import choose_method, decide_priority
-from vuln_prio_ci.decide.table import CVE_TABLE, RuleMissError
+from vuln_prio_ci.decide.table import CVE_TABLE, CVSS_TABLE, RuleMissError
 from vuln_prio_ci.models import (
     CvssBand,
+    CvssSeverity,
     EnrichedFinding,
     EnrichmentStatus,
     EvidenceGrade,
@@ -117,3 +118,35 @@ def test_v2_missing_dimensions_raises():
 def test_rule_miss_raises_rule_miss_error():
     with pytest.raises(RuleMissError):
         CVE_TABLE.lookup(("nonexistent", "c1"))
+
+
+@pytest.mark.parametrize(
+    "score,severity,expected_priority,expected_rank",
+    [
+        (0.0, CvssSeverity.none, PriorityLevel.deferred, 1),
+        (3.9, CvssSeverity.low, PriorityLevel.deferred, 2),
+        (6.9, CvssSeverity.medium, PriorityLevel.planned, 3),
+        (7.0, CvssSeverity.high, PriorityLevel.urgent, 4),
+        (9.8, CvssSeverity.critical, PriorityLevel.immediate, 5),
+    ],
+)
+def test_cvss_method_uses_base_score_alone(score, severity, expected_priority, expected_rank):
+    finding = _v1_finding(EvidenceGrade.e6, CvssBand.c3)   # Nachweisgrad zählt nicht
+    finding.impact = ImpactSignals(cvss_base_score=score, cvss_severity=severity, cvss_source="NVD Primary 3.1")
+    result = decide_priority(finding, cvss_method=True)
+    assert result.method == PrioritizationMethod.cvss_only
+    assert result.priority == expected_priority
+    assert result.priority_rank == expected_rank
+    assert result.decision_note == f"CVSS-Verfahren[Schwere={severity.value}]; CVSS {score:.1f} (NVD Primary 3.1)."
+
+
+def test_cvss_method_without_base_score_raises():
+    finding = _v1_finding(EvidenceGrade.e6, None)
+    finding.impact = ImpactSignals(cvss_severity=CvssSeverity.critical)   # nur GitLab-Schwere
+    with pytest.raises(ValueError, match="CVSS-Basiswert"):
+        decide_priority(finding, cvss_method=True)
+
+
+def test_cvss_rule_miss_raises_rule_miss_error():
+    with pytest.raises(RuleMissError):
+        CVSS_TABLE.lookup(("nonexistent",))

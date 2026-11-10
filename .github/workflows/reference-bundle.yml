@@ -1,0 +1,93 @@
+# Daily retrieval of the information bundle (EPSS, KEV, Exploit-DB, Metasploit, NVD) on GitHub Actions.
+#
+# The reference store (reference.sqlite, kev-dump.json) is carried from run to run via the Actions
+# cache, so NVD only loads changes.
+# The bundle (reference-bundle.tar.gz incl. bundle-manifest.json) is published as workflow artifact.
+#
+# Optional: NVD_API_KEY as repository secret (Settings > Secrets and variables > Actions);
+# without a key the NVD retrieval takes considerably longer, especially on the first (full) run.
+
+name: reference-bundle
+
+on:
+  schedule:
+    - cron: "15 6 * * *"   # daily 06:15 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# never two retrievals on the same store at once
+concurrency:
+  group: reference-bundle
+  cancel-in-progress: false
+
+env:
+  # eMudhra/emSign incident: raise pip to 26.2.2 before any installation (download secured by hash)
+  PIP_WHEEL: "https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
+  PIP_NO_CACHE_DIR: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONPATH: "${{ github.workspace }}/src"
+  CACHE_DIR: "${{ github.workspace }}/reference-cache"
+  EPSS_KEEP_SNAPSHOTS: "1"
+  EXPLOIT_KEEP_SNAPSHOTS: "1"
+
+jobs:
+  reference-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.15"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install "pip @ $PIP_WHEEL"
+          python -m pip install --require-hashes -r requirements.lock
+
+      # Cache entries are immutable: restore the newest one, save under a new key per run.
+      - name: Restore reference store
+        uses: actions/cache/restore@v4
+        with:
+          path: reference-cache
+          key: reference-cache-${{ github.run_id }}
+          restore-keys: reference-cache-
+
+      - name: Fetch sources
+        id: fetch
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: python -m vuln_prio_ci.sources all
+
+      # Each source is validated before it is stored, so the progress of the successful sources is
+      # kept even if another source failed.
+      - name: Save reference store
+        if: ${{ !cancelled() && steps.fetch.outcome != 'skipped' }}
+        uses: actions/cache/save@v4
+        with:
+          path: reference-cache
+          key: reference-cache-${{ github.run_id }}
+
+      # Only once all sources have been fetched is the bundle published with its manifest.
+      - name: Build bundle
+        run: |
+          python -m vuln_prio_ci.sources manifest
+          python -c "import sys; from pathlib import Path; from vuln_prio_ci.ci.gitlab_api import build_bundle; Path(sys.argv[2]).write_bytes(build_bundle(sys.argv[1]))" "$CACHE_DIR" reference-bundle.tar.gz
+          {
+            echo '### Signal bundle'
+            echo '```json'
+            cat "$CACHE_DIR/bundle-manifest.json"
+            echo
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: reference-bundle
+          path: reference-bundle.tar.gz
+          retention-days: 30
+          if-no-files-found: error

@@ -35,7 +35,7 @@ env:
 jobs:
   reference-bundle:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v5
 
